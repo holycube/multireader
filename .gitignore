@@ -1,0 +1,42 @@
+# 开源参考库，不进版本控制
+refs/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dev-debug.log
+# Dependency directories
+node_modules/
+# Environment variables
+.env
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+.DS_Store
+
+# Flutter POC build artifacts (keep poc/lib and pubspec in git)
+poc/build/
+poc/.dart_tool/
+poc/.flutter-plugins
+poc/.flutter-plugins-dependencies
+poc/pubspec.lock
+poc/android/.gradle/
+poc/ios/Pods/
+poc/test/fixtures/*.txt
+poc/test/fixtures/*.epub
+
+# Task files
+# tasks.json
+# tasks/
+
+# ECDICT downloads (large)
+poc/data/
