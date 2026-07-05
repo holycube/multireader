@@ -1,0 +1,1206 @@
+# 沉浸式外语小说阅读器 — 完整需求与技术规格（Task Master 输入）
+
+> 本文档由 PRD-v0.2.md + tech-stack.md + data-model.md + poc-plan.md 合并生成
+> 生成日期：2026-06-21
+
+---
+
+
+
+---
+
+# 来源文件: docs/PRD-v0.2.md
+
+# 沉浸式外语小说阅读器 — 产品需求文档 v0.2
+
+| 字段 | 内容 |
+|------|------|
+| 文档版本 | v0.2 |
+| 状态 | 已定稿（含用户流程、状态机、POC 计划） |
+| 最后更新 | 2026-06-20 |
+| 目标平台 | 移动端（iOS / Android） |
+| 首发语言 | 英文阅读 + 中文释义 |
+| 配套文档 | [技术选型](./tech-stack.md) · [数据模型](./data-model.md) · [用户流程](./user-flow.md) · [POC 计划](./poc-plan.md) |
+
+---
+
+## 1. 产品定位
+
+面向中文用户、专为长篇英文小说设计的本地沉浸式阅读器。
+
+> **一句话定义**：用户自带书，App 负责书之后的一切——解析、高亮、查词、词库管理、进度统计、数据备份。
+
+### 核心价值主张
+
+- **极简视觉**：界面干净纯粹，专注阅读本身，类似日系极简设计
+- **高隐私零门槛**：纯本地运行，无需注册账号，所有数据保存在用户设备本地
+- **长篇专属优化**：专为动辄几百章的长篇网文/轻小说优化，解决大体积文件导入后卡死崩溃的痛点
+- **保留 EPUB 阅读体验**：排版、斜体、插图通过 HTML 渲染保留，而非转为纯文本
+
+---
+
+## 2. 目标用户
+
+既想沉浸式阅读英文长篇小说、又有语言学习需求的中文用户。
+
+**用户画像特征：**
+
+- 已自行获取电子书文件（epub / txt）
+- 希望在一个 App 内完成「阅读 + 查词 + 词汇积累」的完整闭环
+- 对隐私敏感，不愿上传阅读数据或注册账号
+- 对插播广告容忍度低，但可接受克制的节点激励广告
+
+**核心场景：**
+
+用户从合法渠道下载一本英文长篇小说 → 导入 App → 选择词汇水平初始化词库 → 开始沉浸式阅读 → 边读边查词、标记生词/熟词 → 定期查看学习统计 → 将生词导出到 Anki 复习
+
+---
+
+## 3. 核心功能模块
+
+### 3.1 书库与文件管理
+
+| 功能 | 说明 |
+|------|------|
+| 书架界面 | 列表布局；封面 + 书名 + 作者 + 进度 + 最后阅读时间 |
+| 文件导入 | 支持 epub、txt 格式 |
+| 资源页 | 收录 Project Gutenberg、Standard Ebooks 等合法公版书渠道链接 |
+| 导入教程 | 资源页附带「如何从浏览器下载并导入本 App」的操作指引 |
+
+#### 书架规格（P1-08）
+
+| 元素 | 规格 |
+|------|------|
+| 布局 | 列表（非网格）；书架为 App **默认首页** |
+| 封面 | 缩略图约 48×72；无封面时占位图 + 书名首字 |
+| 书名 | 1 行显示，超出省略 |
+| 作者 | 有则显示（灰色小字），无则隐藏 |
+| 进度 | 细进度条 + 百分比（0% 不额外显示「未开始」） |
+| 时间 | 最后阅读时间，相对格式（刚刚 / 今天 / 昨天 / N 天前） |
+| 排序 | 默认按 `reading_progress.updatedAt` 降序（最近阅读） |
+| 空状态 | 引导「导入书籍」与「前往资源」 |
+| 交互 | 点击卡片进入阅读器；MVP 无长按菜单 |
+
+**设计参考：** 书架交互参考月读、KOReader 等信息密度适中的阅读器，而非系统文件管理器。
+
+**明确不做：** 书源聚合、盗版资源分发。App 仅提供合法渠道链接，不承担版权风险。
+
+**导入规则：** 导入 EPUB/TXT 时必须生成 Chapter 记录；禁止将全书合并为单一文件而导致目录与跳转丢失。
+
+### 3.2 分批解析引擎
+
+采用「读多少处理多少」策略，以 **ContentBlock（内容块）** 为处理单位，而非「章」。
+
+| 原则 | 说明 |
+|------|------|
+| 不全书扫描 | 打开某块时才预处理该块，避免卡死与发热 |
+| EPUB 路线 C | 按 spine 保留 HTML；超长块（>12,000 字符）子切为多块 |
+| TXT 统一管线 | 同样生成 Chapter + ContentBlock，块内为纯文本 |
+| 块存储 | 每块一个文件，存于应用私有目录，不写入数据库 BLOB |
+| 变现绑定 | 解锁与预处理额度按 `globalBlockIndex` 计（见第 5 节） |
+| 额度校验 | 仅当 `globalBlockIndex < unlockedBlockCount` 时可预处理该块 |
+
+```mermaid
+flowchart LR
+    importBook[导入书籍] --> buildChapter[生成Chapter目录]
+    buildChapter --> splitBlock[切分ContentBlock]
+    splitBlock --> storeFiles[块文件存私有目录]
+    storeFiles --> userOpen[用户打开某块]
+    userOpen --> quotaCheck{index小于unlocked?}
+    quotaCheck -->|否| unlockScreen[全屏解锁页]
+    quotaCheck -->|是| preprocess[预处理注入高亮]
+    preprocess --> render[渲染阅读]
+    render --> needMore{需要下一块?}
+    needMore -->|是| userOpen
+    needMore -->|否| endState[保持当前状态]
+```
+
+技术细节见 [技术选型](./tech-stack.md)。
+
+### 3.3 智能生词高亮
+
+- 用户维护「已知词库」，阅读器自动将不在词库中的词标记为生词
+- 摒弃复杂的全书词频运算，以用户个人认知状态为准
+- 高亮实时响应词库变化：标记后**当前内容块**即时重绘
+
+**高亮判定唯一规则：** `word NOT IN known_words`（内存 Set）→ 显示虚线下划线；否则正常显示。
+
+**全局词库：** `known_words` 为全局表，跨书共享。在书 A 标为已会的词，在书 B 中同样不再高亮，这是预期行为。
+
+#### EPUB 实现（路线 C）
+
+渲染前在 HTML 文本节点注入：
+
+```html
+<span class="word unknown" data-word="bright">bright</span>
+```
+
+#### TXT 实现
+
+使用 `Text.rich` + `TextSpan` 逐词渲染；`unknown` 词加 `decoration: dashed underline`。归一化与 Set 比对逻辑与 EPUB 相同。
+
+| 样式 | 显示效果 |
+|------|----------|
+| 生词（unknown） | **虚线下划线** |
+| 熟词（known） | **正常显示，无高亮** |
+
+**词形归一化（MVP v1）：**
+
+| 规则 | 示例 |
+|------|------|
+| 转小写 | `Bright` → `bright` |
+| 去首尾标点 | `word,` → `word` |
+| 缩写整词保留 | `don't` → `don't` |
+| 不做词干化 | `brightly` 与 `bright` 分开处理 |
+
+`data-word`（EPUB）或内部词键（TXT）存放归一化词形；页面仍显示书中原文。
+
+#### 词库冷启动向导（P1-07）
+
+**触发：** 首次启动 App；可「稍后再说」跳过。
+
+**跳过补救：** 词库为空时，首次打开阅读器显示可关闭轻提示：「词汇量未设置，生词可能偏多」。
+
+**3 步流程：**
+
+1. **欢迎**：说明词汇量用于控制生词下划线
+2. **选择**：预置等级 **或** 从 txt/csv 词表导入
+3. **确认**：展示将标记为「已会」的词数 → 批量写入 `known_words` → 加载内存 Set
+
+**预置等级（高级叠加低级）：**
+
+| 选项 | 约词数 | source 标识 |
+|------|--------|-------------|
+| 高中 / 四级 | ~4,500 | `preset_cet4` |
+| 六级 | ~6,000 | `preset_cet6`（含四级） |
+| 托福 / 雅思 | ~8,000 | `preset_toefl` |
+| 熟练 | ~12,000 | `preset_advanced` |
+
+**导入：** 屏 2 次要入口；MVP 支持 **txt/csv 词表**（每行一词或 word 列）。Anki `.apkg` 导入延至 P2。
+
+**后续管理（设置 / 词库 Tab）：**
+
+- 查看已知词数
+- 重选等级：**追加合并**（不覆盖已有 `known_words`）
+- 提供「重置词库」（清空后需重新设置）
+- 词表文件导入（同向导）
+
+**数据飞轮：** 用户使用越久 → 词库越准确 → 高亮越精准 → 用户粘性越高
+
+### 3.4 查词与词库交互
+
+#### 阅读器布局
+
+| 元素 | 行为 |
+|------|------|
+| 正文区 | 垂直滚动；按 `storageType` 加载 HTML 或纯文本块 |
+| 顶栏 / 底栏 | 点击正文区切换显示/隐藏（沉浸模式） |
+| 目录 | 列出 Chapter 表；点击跳转至该章第一块 |
+| 块衔接 | 滚至块末自动加载下一块；跨章时顶栏章标题更新 |
+| 解锁进度 | 底栏「已解锁 x/y 段」为 **可选** MVP 功能 |
+
+#### 手势设计
+
+- **单击任意词**（HTML span 或 TXT TextSpan）→ 弹出查词面板
+- 单击非词区域 → 切换顶底栏
+- 不使用双击或长按
+
+#### 查词面板
+
+- **位置**：底部半屏弹出（可上拉看长释义）
+
+| 点击词的状态 | 主操作按钮 | 次操作按钮 |
+|-------------|-----------|-----------|
+| 生词 | ✓ 已会 | ★ 收藏 |
+| 熟词 | ★ 加入生词本 | ✓ 确认已会 |
+
+**即时反馈：** 操作后更新数据库与内存 Set，**仅重绘当前 ContentBlock**。
+
+#### 离线词典
+
+- MVP：内置精简 JSON 词典（约 3–5k 常用词）
+- P1：按需下载完整词典包
+- 详见 [技术选型 — 词典](./tech-stack.md#7-离线词典)
+
+### 3.5 阅读统计
+
+| 指标 | 说明 |
+|------|------|
+| 每日阅读时长 | 按天统计，支持查看历史趋势 |
+| 新词习得曲线 | 词库增长趋势可视化 |
+| 词汇量概览 | 已知词数、生词本词数等核心数字 |
+
+### 3.6 数据导出与备份
+
+| 功能 | 说明 |
+|------|------|
+| Anki 导出 | 生词本导出为 `.apkg`（P2） |
+| Anki 导入 | `.apkg` 词库导入（P2）；MVP 仅 txt/csv |
+| 匿名进度备份 | 可选，二维码或字符串形式（P2） |
+| 无账号设计 | 不绑定账号，用户自行保管备份码 |
+
+### 3.7 章节与跳转
+
+| 概念 | 面向 | 用途 |
+|------|------|------|
+| **Chapter** | 用户 | 目录列表、章标题、跳转、进度展示 |
+| **ContentBlock** | 引擎 | 加载、预处理、高亮、广告解锁 |
+
+**关系规则：**
+
+- 默认 **1 章 = 1 块**
+- 单章超过 12,000 字符 → **1 章 = 多块**（目录仍一行）
+- 多个 spine 项合并为一章 → **1 章 = 多块**
+- 目录只展示 Chapter
+
+**EPUB：** 按 spine + 目录生成 Chapter；资源复制至 `books/{bookId}/assets/`，块内 HTML 重写相对路径。
+
+**TXT：** 正则匹配 `Chapter N` 等分章；失败则按 12,000 字符切块，Chapter 标题用「第 N 段」等通用名。
+
+**跳转：** 点击目录第 N 章 → 该章 `blockOrderInChapter = 0` 的块 → 打开阅读器。
+
+### 3.8 查词状态机
+
+高亮仅由 `known_words` 决定；`vocab_entries`（生词本）记录学习收藏，不改变高亮判定（除非触发「加入生词本」移除 known）。
+
+| 操作 | 起始 | `known_words` | `vocab_entries` | 高亮变化 |
+|------|------|---------------|-----------------|----------|
+| 已会 | 生词 | INSERT | 保留已有记录 | 下划线消失 |
+| 收藏 | 生词 | 不变 | INSERT/UPDATE `starred=true` + 例句 | 保持 |
+| 加入生词本 | 熟词 | DELETE | INSERT + 例句 | 下划线出现 |
+| 确认已会 | 熟词 | INSERT（幂等） | 不变 | 保持 |
+| 取消收藏 | 生词/熟词 | 不变 | UPDATE `starred=false` | 保持 |
+
+**收藏 vs 加入生词本：** 收藏不改动 `known_words`，仅加入生词本；加入生词本先从 `known_words` 删除再写入生词本。
+
+详见 [数据模型 — 查词状态机](./data-model.md#9-查词状态机与表写入)。
+
+---
+
+## 4. 信息架构
+
+```mermaid
+flowchart TB
+    subgraph mainTabs [主导航]
+        bookshelf[书架 默认首页]
+        stats[统计]
+        vocab[词库]
+        resources[资源]
+        settings[设置]
+    end
+
+    bookshelf --> reader[阅读器]
+    reader --> chapterDrawer[章节目录]
+    reader --> lookupPanel[查词面板]
+    reader --> unlockScreen[解锁页]
+    vocab --> ankiExport[Anki导出 P2]
+    settings --> dictDownload[词典下载]
+    settings --> vocabSetup[词汇量设置]
+    settings --> backupRestore[进度备份 P2]
+    resources --> legalLinks[合法书源链接]
+    resources --> importGuide[导入教程]
+```
+
+---
+
+## 5. 变现策略
+
+### 5.1 基本原则
+
+- 基础功能完全免费
+- 日常阅读中零横幅广告、零弹窗
+- 节点激励广告，用户主动触发
+
+### 5.2 免费额度
+
+- 每本书导入后 `unlockedBlockCount = 40`
+- 可预处理块：`globalBlockIndex` 为 **0-based**，满足 `index < 40`（即第 0–39 块，共 40 块）
+
+### 5.3 节点激励广告
+
+| 规则 | 说明 |
+|------|------|
+| 绑定对象 | 预处理额度（`globalBlockIndex` 与 `unlockedBlockCount`） |
+| 触发条件 | 滚至下一块且 `globalBlockIndex >= unlockedBlockCount` |
+| 解锁增量 | 每观看一次激励视频 → `unlockedBlockCount += 100` |
+| 用户感知 | 「解锁更多段」，非「被打断阅读」 |
+
+### 5.4 解锁交互（P1-10）
+
+| 项 | 规格 |
+|----|------|
+| 界面 | **全屏解锁页**（非弹窗） |
+| 文案 | 对用户称「段」（如「已读 40 段」「解锁 100 段」） |
+| 返回 | 可返回继续读已解锁内容，不绑架 |
+| 首次触达 | 一次性说明免费机制，之后不重复 |
+| 广告失败 | 提示重试；**不送额度、不放行** |
+| 中途关闭 | 视为未完成，停留解锁页 |
+| 无网络 | 可读已解锁块；不可开新块 |
+| POC | 模拟「观看 3 秒」按钮代替真实 SDK |
+
+---
+
+## 6. 交互与体验原则
+
+1. **操作成本极低**：词库标记、查词须在 2 次点击内完成
+2. **即时反馈**：标记熟词后下划线立刻消失
+3. **不打扰阅读**：日常零横幅、零弹窗
+4. **成长可见**：词库数量、阅读时长可见
+5. **本地优先**：核心数据仅存本地
+6. **排版优先**：EPUB 保留 HTML；TXT 用 TextSpan 双管线
+
+---
+
+## 7. 暂不涉及
+
+| 项目 | 原因 |
+|------|------|
+| 书源聚合 | 版权风险 |
+| 多语言 | 当前仅中英 |
+| 社交 / 排行榜 | 与极简定位不符 |
+| 强制账号 | 与高隐私冲突 |
+| 词干化 | MVP 不做 |
+| Anki `.apkg` 导入 | P2 |
+
+---
+
+## 8. MVP 优先级
+
+| 优先级 | 功能 |
+|--------|------|
+| P0 | 书库导入（EPUB+TXT）+ 分批块处理 + 双管线阅读器 |
+| P0 | 词库冷启动向导 + 生词高亮 + 查词状态机 |
+| P0 | 单击查词 + 章节目录跳转 |
+| P1 | 阅读统计 |
+| P1 | 节点激励广告（按块解锁） |
+| P1 | 资源页 + 导入教程 |
+| P2 | Anki 导出 / 导入 |
+| P2 | 匿名进度备份 |
+
+---
+
+## 9. 开放问题
+
+- 预置词库词表来源与授权
+- 完整离线词典方案（StarDict/MDX 等，P1）
+- 匿名备份加密与格式
+- 词干化是否纳入 P1
+- 阅读器横翻可选模式
+- `flutter_widget_from_html` POC 最终确认
+- `epubx` POC 结论
+
+---
+
+## 10. 已敲定决策摘要
+
+| 决策项 | 结论 | 详见 |
+|--------|------|------|
+| 跨平台框架 | Flutter | [tech-stack.md](./tech-stack.md) |
+| 本地数据库 | Drift + 内存 Set | [tech-stack.md](./tech-stack.md) |
+| EPUB 策略 | 路线 C | [tech-stack.md](./tech-stack.md) |
+| TXT 策略 | TextSpan 双管线 | [tech-stack.md](./tech-stack.md) |
+| 数据模型 | Chapter + ContentBlock | [data-model.md](./data-model.md) |
+| 解锁边界 | 0-based；free=40 即 index 0–39 | [data-model.md](./data-model.md) |
+| 查词状态机 | 见 §3.8 | [data-model.md](./data-model.md) |
+| 词库向导 | 3 步，4 档叠加，txt/csv | [user-flow.md](./user-flow.md) |
+| 书架 | 列表，最近阅读，默认首页 | [user-flow.md](./user-flow.md) |
+| 广告交互 | 全屏解锁页，段文案 | [user-flow.md](./user-flow.md) |
+| 生词高亮 | 虚线下划线 | §3.3 |
+| 词归一化 | 小写+去标点；缩写整词 | §3.3 |
+| POC | 两阶段验证 | [poc-plan.md](./poc-plan.md) |
+
+
+---
+
+# 来源文件: docs/tech-stack.md
+
+# 技术选型
+
+| 字段 | 内容 |
+|------|------|
+| 文档版本 | v1.0 |
+| 状态 | 已定稿 |
+| 最后更新 | 2026-06-20 |
+| 关联 PRD | [PRD v0.2](./PRD-v0.2.md) |
+
+---
+
+## 1. 跨平台框架
+
+**决策：Flutter**
+
+| 考量 | 说明 |
+|------|------|
+| 阅读器渲染 | 自绘引擎，适合自定义 HTML 词 span 与高亮样式 |
+| 性能 | AOT 编译 + Isolate，适合分批预处理与大文本 |
+| 双端一致性 | 日系极简 UI 在 iOS / Android 表现统一 |
+| 本地生态 | Drift、path_provider、file_picker 等成熟 |
+
+未选 React Native 的原因：大文本 + 逐词高亮在 RN 侧常需额外原生模块；未选原生双端的原因：单人/小团队成本过高。
+
+---
+
+## 2. 本地数据库
+
+**决策：Drift（单库）+ 运行时内存 `Set<String>` 词库缓存**
+
+| 组件 | 用途 |
+|------|------|
+| Drift (SQLite) | 书籍、章节、块元数据、词库、进度、统计、解锁额度 |
+| 内存 `Set<String>` | 已知词 O(1) 查询，启动时从 `known_words` 表加载 |
+
+未采用双库（Drift + Isar）的原因：小说阅读词库规模通常 5,000–40,000 词，Drift + 内存 Set 足够；后续若需拓展学术词包，可通过 `known_words.source` 字段扩展。
+
+表结构详见 [数据模型](./data-model.md)。
+
+---
+
+## 3. EPUB 处理策略（路线 C）
+
+**决策：保留 HTML，渲染前预处理注入高亮 span**
+
+### 3.1 方案对比（摘要）
+
+| 路线 | 做法 | 结论 |
+|------|------|------|
+| A 原版富文本 | 渲染后像素级点词 | 开发成本最高，未采用 |
+| B 纯文本管线 | EPUB 转 TXT，TextSpan 高亮 | 丢失排版，未采用 |
+| **C 折中（采用）** | 保留 HTML，预处理注入 span | 保留排版 + 交互可控 |
+
+### 3.2 导入管线
+
+```mermaid
+flowchart LR
+    epubFile[EPUB文件] --> unzip[epubx解压]
+    unzip --> readSpine[读取spine与目录]
+    readSpine --> genChapter[写入Chapter表]
+    readSpine --> saveHtml[按块保存HTML文件]
+    saveHtml --> maybeSplit{超过12000字符?}
+    maybeSplit -->|是| subSplit[子切为多块]
+    maybeSplit -->|否| oneBlock[一块]
+    subSplit --> genBlock[写入ContentBlock表]
+    oneBlock --> genBlock
+```
+
+### 3.3 阅读管线
+
+```mermaid
+flowchart LR
+    openBlock[打开ContentBlock] --> loadHtml[读取块HTML文件]
+    loadHtml --> tokenize[遍历文本节点]
+    tokenize --> injectSpan[注入word span]
+    injectSpan --> compareSet[比对内存词库Set]
+    compareSpan[输出带高亮HTML] --> render[widget_from_html渲染]
+    compareSet --> injectSpan
+    injectSpan --> compareSpan
+```
+
+### 3.4 降级策略
+
+单块 HTML 预处理失败时，该块降级为纯文本渲染（`storageType=plain`），不影响全书其他块。
+
+### 3.5 EPUB 资源策略
+
+- 导入时将图片、CSS 等资源复制到 `books/{bookId}/assets/`
+- 块 HTML 内 `src`/`href` 重写为相对路径 `assets/...`
+- 确保 `flutter_widget_from_html` 可正确加载本地资源
+
+### 3.6 TXT 处理策略
+
+- 导入：正则分章或按 12,000 字符切块 → 存 `.txt` 块文件 → `storageType=plain`
+- 阅读：读块文本 → 按空白切词 → 归一化 → 比对 Set → 构建 `TextSpan` 列表
+- `unknown`：`TextStyle(decoration: TextDecoration.underline, decorationStyle: TextDecorationStyle.dashed)`
+- 与 EPUB 共用：查词面板、状态机、重绘当前块逻辑
+
+**分章正则（优先匹配）：**
+
+```
+/^\s*(chapter|ch\.?)\s+(\d{1,4}|[ivxlcdmIVXLCDM]+)\b/im
+```
+
+**兜底规则：** 无任何主正则命中 → 按 12,000 字符（`String.length`）切块，Chapter 标题「第 N 段」。
+
+---
+
+## 4. 阅读器组件与双管线
+
+| 组件 | 选型 | 说明 |
+|------|------|------|
+| HTML 渲染 | `flutter_widget_from_html`（POC 可对比验证） | 自定义 WidgetFactory 处理 `span.word` |
+| EPUB 解析 | `epubx`（POC 验证） | 纯 Dart，无原生依赖 |
+| TXT 渲染 | `Text.rich` + `TextSpan` | 逐词可点击 |
+| 词点击 | span/TextSpan `Recognizer` 或 `TapGestureRecognizer` | 回调归一化词形与是否 unknown |
+| 查词面板 | 底部 `showModalBottomSheet` | 半屏，可拖拽展开 |
+| 滚动 | 垂直 `SingleChildScrollView` | 块内滚动；块末接下一键 |
+
+### 双管线流程
+
+```mermaid
+flowchart TB
+    openBlock[打开ContentBlock]
+    openBlock --> typeCheck{storageType?}
+    typeCheck -->|html| htmlPath[读HTML文件]
+    typeCheck -->|plain| plainPath[读TXT文件]
+    htmlPath --> injectHtml[注入span到HTML]
+    plainPath --> tokenizePlain[切词生成TextSpan]
+    injectHtml --> renderHtml[flutter_widget_from_html]
+    tokenizePlain --> renderPlain[Text.rich]
+    renderHtml --> tap[单击查词]
+    renderPlain --> tap
+```
+
+### 阅读器交互默认值
+
+| 项 | 默认值 |
+|----|--------|
+| 翻页方式 | 垂直滚动 |
+| 查词面板 | 底部半屏 |
+| 块末行为 | 自动加载下一块 |
+| 顶底栏 | 点击正文切换显隐 |
+
+---
+
+## 5. 块存储
+
+**决策：应用私有目录，每块一个文件，不进数据库 BLOB**
+
+```
+{appDocuments}/books/{bookId}/
+  ├── cover.jpg
+  ├── assets/          # EPUB 图片、CSS
+  ├── block_0000.html
+  ├── block_0001.txt
+  └── ...
+```
+
+| 理由 | 说明 |
+|------|------|
+| 性能 | 避免 SQLite 存大文本拖慢查询 |
+| 内存 | 按需读取当前块 |
+| 备份 | 可与数据库一并打包导出 |
+
+数据库 `content_blocks` 表只存路径、字数、状态等元数据。
+
+---
+
+## 6. 词归一化与高亮样式
+
+### 6.1 归一化规则（MVP v1）
+
+| 步骤 | 规则 | 示例 |
+|------|------|------|
+| 1 | Unicode 小写 | `Bright` → `bright` |
+| 2 | 去除首尾标点 | `"word,"` → `word` |
+| 3 | 缩写整词保留 | `don't` → `don't` |
+| 不做 | 词干化 / 词形还原 | `brightly` 保持 `brightly` |
+
+归一化结果写入 `data-word` 属性；页面显示文本保持书中原样。
+
+### 6.2 高亮样式
+
+| CSS 类 | 效果 |
+|--------|------|
+| `.word.unknown` | `text-decoration: underline; text-decoration-style: dashed;` |
+| `.word.known` | 无额外样式 |
+
+### 6.3 HTML 示例
+
+```html
+<p>It was a <span class="word unknown" data-word="bright">Bright</span> cold day.</p>
+```
+
+---
+
+## 7. 离线词典
+
+### MVP（已定）
+
+- 内置精简 **JSON 词典**（约 3–5k 常用词，英→中）
+- 首次启动复制到应用目录或随包打包
+- 查词：内存 Map 查找，目标 < 100ms
+
+### P1（待定）
+
+- 按需下载完整词典包
+- 格式候选：StarDict / MDX / 扩展 JSON
+
+---
+
+## 8. 关键参数
+
+| 参数 | 默认值 | 单位 | 用途 |
+|------|--------|------|------|
+| 长章子切阈值 | 12,000 | 字符数（`String.length`） | 超过则 1 章拆为多个 ContentBlock |
+| 免费预处理块数 | 40 | 块 | 每本书首次导入的免费额度 |
+| 广告解锁增量 | +100 | 块 | 每次激励广告解锁的块数 |
+
+---
+
+## 9. 待定（P1）
+
+| 项 | 状态 |
+|----|------|
+| 完整离线词典 | StarDict / MDX（MVP 已用 JSON） |
+| 词典 CDN 分发 | 待定 |
+| 词干化 | Porter stemmer 等（可选） |
+| 广告 SDK | AdMob / 穿山甲（POC 用模拟按钮） |
+| HTML 渲染库 | POC 最终确认 widget_from_html |
+| epubx | POC 验证结论 |
+
+
+---
+
+# 来源文件: docs/data-model.md
+
+# 数据模型
+
+| 字段 | 内容 |
+|------|------|
+| 文档版本 | v1.1 |
+| 状态 | 已定稿 |
+| 最后更新 | 2026-06-20 |
+| 关联 PRD | [PRD v0.2](./PRD-v0.2.md) |
+| 数据库 | Drift (SQLite) |
+
+---
+
+## 1. 设计原则
+
+| 原则 | 说明 |
+|------|------|
+| 章块分离 | Chapter 面向用户目录；ContentBlock 面向引擎加载 |
+| 块即解锁单位 | `globalBlockIndex` 驱动预处理额度与广告解锁 |
+| 大内容外置 | HTML/文本存文件，数据库只存元数据 |
+| 词库可扩展 | `known_words.source` 预留预置词库与拓展词包 |
+
+---
+
+## 2. 实体关系图
+
+```mermaid
+erDiagram
+    books ||--o{ chapters : has
+    books ||--o{ content_blocks : has
+    chapters ||--o{ content_blocks : contains
+    books ||--|| reading_progress : tracks
+    books ||--|| parse_quota : limits
+    books ||--o{ vocab_entries : sources
+
+    books {
+        text id PK
+        text title
+        text author
+        text coverPath
+        text sourceFormat
+        text sourcePath
+        text importStatus
+        int totalChapters
+        int totalBlocks
+        int importedAt
+    }
+
+    chapters {
+        text id PK
+        text bookId FK
+        int orderIndex
+        text title
+        int blockCount
+    }
+
+    content_blocks {
+        text id PK
+        text bookId FK
+        text chapterId FK
+        int blockOrderInChapter
+        int globalBlockIndex
+        text storageType
+        text contentPath
+        int charCount
+        text parseStatus
+        int parsedAt
+    }
+
+    reading_progress {
+        text bookId PK
+        text chapterId
+        text blockId
+        int charOffset
+        int updatedAt
+    }
+
+    known_words {
+        text word PK
+        text source
+        int addedAt
+    }
+
+    vocab_entries {
+        text id PK
+        text word
+        text definition
+        text context
+        text bookId
+        text chapterId
+        text blockId
+        bool starred
+        int createdAt
+        int updatedAt
+    }
+
+    parse_quota {
+        text bookId PK
+        int unlockedBlockCount
+        int freeAllowance
+        int lastAdUnlockAt
+    }
+
+    reading_stats_daily {
+        text date PK
+        text bookId PK
+        int minutes
+        int newWordsCount
+    }
+```
+
+---
+
+## 3. 表定义
+
+### 3.1 `books` — 书籍
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| title | TEXT | 书名 |
+| author | TEXT? | 作者 |
+| coverPath | TEXT? | 封面本地路径 |
+| sourceFormat | TEXT | `epub` / `txt` |
+| sourcePath | TEXT | 原始导入文件路径（元数据/调试；阅读内容已按块存私有目录） |
+| importStatus | TEXT | `pending` / `complete` / `failed`；导入完成后置 `complete`；书架只显示 `complete` |
+| totalChapters | INT | 章数（冗余，书架展示） |
+| totalBlocks | INT | 总块数（解锁计算） |
+| importedAt | INT | 导入时间戳 |
+
+### 3.2 `chapters` — 章节目录（用户可见）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| bookId | TEXT FK | 所属书 |
+| orderIndex | INT | 目录排序，从 0 起 |
+| title | TEXT | 章标题（来自 EPUB 目录或启发式） |
+| blockCount | INT | 该章含块数，通常 1 |
+
+**目录跳转：** 点击第 N 章 → 查 `orderIndex = N` → 取该章 `blockOrderInChapter = 0` 的 ContentBlock。
+
+### 3.3 `content_blocks` — 内容块（引擎单位）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| bookId | TEXT FK | 所属书 |
+| chapterId | TEXT FK | 所属章 |
+| blockOrderInChapter | INT | 章内块序号，从 0 起 |
+| globalBlockIndex | INT | 全书块序号，**解锁与广告用** |
+| storageType | TEXT | `html` / `plain` |
+| contentPath | TEXT | 块文件路径（私有目录） |
+| charCount | INT | 纯文本字符数（`String.length`） |
+| parseStatus | TEXT | `pending` / `processing` / `done` / `failed` |
+| parsedAt | INT? | 预处理完成时间 |
+
+### 3.4 `reading_progress` — 阅读进度
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| bookId | TEXT PK | 一书一条 |
+| chapterId | TEXT | 当前章 |
+| blockId | TEXT | 当前块 |
+| charOffset | INT | 块内已读字符偏移（与设备/字体无关） |
+| updatedAt | INT | 最后更新时间 |
+
+**书架进度百分比：**
+
+```
+progress = (currentBlock.globalBlockIndex + charOffset / block.charCount) / book.totalBlocks
+```
+
+取值范围 `[0.0, 1.0]`；书架显示时 ×100 取整为百分比。`charOffset` 用于重绘后恢复阅读位置，不依赖像素滚动偏移。
+
+### 3.5 `known_words` — 已知词库
+
+**全局设计：** 无 `bookId` 字段，跨书共享。在书 A 标为已会的词，在书 B 中同样不再高亮（预期行为）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| word | TEXT PK | 归一化词形（小写、去首尾标点） |
+| source | TEXT | `user` / `preset_cet4` / `pack_xxx` |
+| addedAt | INT | 加入时间 |
+
+启动时加载至内存 `Set<String>`；标记「已会」时同步写入。
+
+### 3.6 `vocab_entries` — 生词本
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | TEXT PK | UUID |
+| word | TEXT | 归一化词形 |
+| definition | TEXT? | 收藏时的释义快照 |
+| context | TEXT? | 上下文例句 |
+| bookId | TEXT? | 来源书 |
+| chapterId | TEXT? | 来源章 |
+| blockId | TEXT? | 来源块（精确定位例句） |
+| starred | BOOL | 是否收藏；默认 `false` |
+| createdAt | INT | 创建时间 |
+| updatedAt | INT | 收藏状态变更时间（支持「最近收藏」排序） |
+
+**`starred` 默认值与操作：**
+
+| 操作 | `starred` 写入 |
+|------|----------------|
+| 收藏 | `true` |
+| 加入生词本 | `false`（默认） |
+| 取消收藏 | `false` |
+
+### 3.7 `parse_quota` — 预处理解锁额度
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| bookId | TEXT PK | 一书一条 |
+| unlockedBlockCount | INT | 已解锁可预处理的最大块数 |
+| freeAllowance | INT | 初始免费配额，当前默认 40；保留字段用于未来差异化运营（如首批用户免费 80 块） |
+| lastAdUnlockAt | INT? | 上次广告解锁时间 |
+
+**解锁规则（off-by-one 明确定义）：**
+
+- `globalBlockIndex`：**0-based**，全书从 0 递增
+- 新书导入：`unlockedBlockCount = freeAllowance`（40）
+- **可预处理**：`globalBlockIndex < unlockedBlockCount`（即 index 0–39 共 40 块免费）
+- **需广告**：`globalBlockIndex >= unlockedBlockCount`（从 index 40 起）
+- 观看激励视频后：`unlockedBlockCount += 100`
+
+### 3.8 `reading_stats_daily` — 每日统计
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| date | TEXT PK（复合） | `YYYY-MM-DD` |
+| bookId | TEXT PK（复合） | 所属书；`NULL` 表示当日全站合计行 |
+| minutes | INT | 当日阅读分钟 |
+| newWordsCount | INT | 当日新增 `known_words` 数 |
+
+---
+
+## 4. Chapter 与 ContentBlock 关系规则
+
+| 场景 | Chapter | ContentBlock | 用户感知 |
+|------|---------|--------------|----------|
+| 默认 EPUB spine | 1 | 1 | 一章一行目录 |
+| 长章 >12,000 字符 | 1 | N | 目录仍一行，内部无感多块 |
+| 多 spine 合并一章 | 1 | N | 目录一行，内容顺序拼接 |
+| TXT 正则分章 | 1 | 1 或 N | 同 EPUB 逻辑 |
+
+```mermaid
+flowchart TB
+    subgraph userLayer [用户层]
+        toc[章节目录 Chapter]
+    end
+
+    subgraph engineLayer [引擎层]
+        block0[Block 0]
+        block1[Block 1]
+        block2[Block 2]
+    end
+
+    toc -->|点击Chapter1| block0
+    toc -->|点击Chapter2| block2
+    block0 -->|滚至末尾| block1
+    block1 -->|滚至末尾| block2
+```
+
+---
+
+## 5. 导入落表流程（EPUB）
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Importer
+    participant EPUB
+    participant FileSystem
+    participant DB as Drift
+
+    User->>Importer: 选择EPUB
+    Importer->>DB: insert Book importStatus=pending
+    Importer->>EPUB: 解析spine与目录
+    Importer->>FileSystem: 复制图片CSS到assets目录
+    loop 每个spine项
+        Importer->>Importer: 确定Chapter标题
+        Importer->>Importer: 重写HTML内资源相对路径
+        Importer->>FileSystem: 保存块HTML文件
+        alt 字符数超过12000
+            Importer->>Importer: 子切为多个块
+        end
+        Importer->>DB: insert Chapter
+        Importer->>DB: insert ContentBlock
+    end
+    Importer->>DB: insert parse_quota
+    Importer->>DB: UPDATE books SET importStatus=complete
+```
+
+**约束：** 禁止全书合并为单文件而不生成 Chapter 记录。
+
+**导入失败：** 任一步骤异常时 `UPDATE books SET importStatus=failed`；书架不展示 `pending` / `failed` 的书；用户可重新导入（覆盖或清理后重试）。
+
+---
+
+## 6. 删除书籍规范
+
+用户从书架删除一本书时，按以下规则处理：
+
+| 对象 | 操作 |
+|------|------|
+| `content_blocks` | DELETE（按 `bookId` 级联） |
+| `chapters` | DELETE |
+| `parse_quota` | DELETE |
+| `reading_progress` | DELETE |
+| `vocab_entries` | **保留**；`UPDATE SET bookId=NULL`（词汇积累不丢失） |
+| 文件系统 | 删除 `{appDocuments}/books/{bookId}/` 目录（含块文件与 assets） |
+| `books` | DELETE |
+
+**顺序建议：** 先删文件系统与块元数据，再删 `books` 主记录，最后批量 `vocab_entries.bookId` 置 null。
+
+---
+
+## 7. 运行时数据流（阅读单块）
+
+```mermaid
+sequenceDiagram
+    participant Reader
+    participant FS as 块文件
+    participant Set as 内存词库Set
+    participant DB as Drift
+
+    Reader->>DB: 读reading_progress含charOffset
+    Reader->>DB: 读content_block元数据
+    Reader->>FS: 加载contentPath
+    Reader->>Set: 比对known_words
+    Reader->>Reader: 注入span并重绘
+    Reader->>Reader: 按charOffset恢复阅读位置
+    Note over Reader: 用户点击已会
+    Reader->>DB: insert known_words
+    Reader->>Set: 更新Set
+    Reader->>Reader: 仅重绘当前块
+```
+
+---
+
+## 8. 关键参数
+
+| 参数 | 值 | 单位 | 关联 |
+|------|-----|------|------|
+| 长章子切阈值 | 12,000 | 字符数（`String.length`） | `content_blocks` 拆分 |
+| 免费额度 | 40 块（index 0–39） | 块 | `parse_quota.freeAllowance` |
+| 广告解锁 | +100 块 | 块 | `parse_quota.unlockedBlockCount` |
+
+---
+
+## 9. 查词状态机与表写入
+
+**高亮判定：** 仅看 `known_words` 内存 Set。`vocab_entries` 为生词本元数据，默认不改变高亮。
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unknown: word不在known_words
+    [*] --> Known: word在known_words
+    Unknown --> Known: 已会_INSERT_known_words
+    Unknown --> Unknown: 收藏_INSERT_vocab_entries
+    Known --> Unknown: 加入生词本_DELETE_known_INSERT_vocab
+    Known --> Known: 确认已会_幂等INSERT
+    Unknown --> Unknown: 取消收藏_UPDATE_starred_false
+    Known --> Known: 取消收藏_UPDATE_starred_false
+```
+
+| 操作 | 起始 | `known_words` | `vocab_entries` | 高亮 |
+|------|------|---------------|-----------------|------|
+| 已会 | 生词 | INSERT | 保留已有 | 消失 |
+| 收藏 | 生词 | 不变 | INSERT/UPDATE `starred=true` + 例句 | 保持 |
+| 加入生词本 | 熟词 | DELETE | INSERT + 例句 | 出现 |
+| 确认已会 | 熟词 | INSERT 幂等 | 不变 | 保持 |
+| 取消收藏 | 生词/熟词 | 不变 | UPDATE `starred=false` | 不变 |
+
+**取消收藏：** 不影响高亮判定，不触碰 `known_words`；若该词无其他生词本记录，可保留 `vocab_entries` 行仅置 `starred=false`。
+
+**预设词库覆盖：** 用户点「加入生词本」可从 `known_words` 移除预置词（`source=preset_*`），视为用户主动覆盖。
+
+---
+
+## 10. TXT 导入落表流程
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Importer
+    participant FileSystem
+    participant DB as Drift
+
+    User->>Importer: 选择TXT
+    Importer->>DB: insert Book importStatus=pending
+    Importer->>Importer: 正则检测Chapter或按12000字符切块
+    loop 每个章节或块
+        Importer->>FileSystem: 保存块plain文本文件
+        Importer->>DB: insert Chapter
+        Importer->>DB: insert ContentBlock storageType=plain
+    end
+    Importer->>DB: insert parse_quota
+    Importer->>DB: UPDATE books SET importStatus=complete
+```
+
+**TXT 章节规则：** 优先匹配 `Chapter N` 等（见 [tech-stack.md §3.6](./tech-stack.md#36-txt-处理策略)）；无匹配则按 12,000 字符切块，Chapter 标题用「第 N 段」。
+
+**块文件目录示例：**
+
+```
+{appDocuments}/books/{bookId}/
+  ├── assets/          # EPUB 图片与 CSS
+  ├── block_0000.html  # storageType=html
+  ├── block_0001.txt   # storageType=plain
+  └── cover.jpg
+```
+
+
+---
+
+# 来源文件: docs/poc-plan.md
+
+# POC 验证计划
+
+| 字段 | 内容 |
+|------|------|
+| 文档版本 | v1.0 |
+| 状态 | 待执行 |
+| 最后更新 | 2026-06-20 |
+| 关联 PRD | [PRD v0.2](./PRD-v0.2.md) |
+| 技术选型 | [tech-stack.md](./tech-stack.md) |
+
+---
+
+## 目标
+
+在全面 MVP 开发前，验证以下高风险假设：
+
+1. 大体积 EPUB/TXT 按块导入与切换不卡死（P0-05）
+2. HTML span 与 TXT TextSpan 高亮 + 查词交互流畅（P0-06）
+3. 假解锁逻辑与额度边界正确（P1-10 前置）
+
+通过后产出 [poc-report.md](./poc-report.md)（执行后撰写，本文档为计划）。
+
+---
+
+## 执行约束
+
+| 项 | 说明 |
+|----|------|
+| 时间盒 | 每项 POC 2–3 天，不过线则调参而非无限延期 |
+| 测试机 | 至少 1 台中端 Android + 1 台 iPhone |
+| 测试书 | 1 本 Gutenberg EPUB（带图）+ 1 本超长 txt 网文 |
+| 代码范围 | 独立 Flutter 最小工程，非完整 App |
+
+---
+
+## POC1 — 导入与分块（P0-05）
+
+### 范围
+
+- `epubx` 解析 EPUB spine 与目录
+- 复制资源到 `books/{bookId}/assets/`
+- 块 HTML 路径重写
+- Drift 写入 `books` / `chapters` / `content_blocks` / `parse_quota`
+- TXT：正则分章 + plain 块文件
+- 按块加载并渲染（**无高亮、无查词**）
+
+### 不做
+
+- 词库、查词面板、真实广告 SDK、书架 UI 美化
+
+### 通过指标
+
+| 指标 | 通过线 |
+|------|--------|
+| 单块加载到首屏 | < 800ms |
+| 块切换 | < 500ms |
+| 导入 300+ 块的书 | 进程内存峰值 < 200MB |
+| 连续加载 50 块后内存 | 稳定 < 150MB（无持续增长） |
+| 滚动帧率 | 平均 ≥ 50fps |
+| 带图 EPUB | 图片正常显示 |
+
+### 失败预案
+
+| 现象 | 对策 |
+|------|------|
+| 导入太慢 | Isolate 后台导入；延迟预处理 |
+| 单块过大 | 子切阈值 12,000 字符 → 8,000 字符 |
+| 内存涨 | 仅缓存当前块 ±1 |
+| 图片路径错误 | 检查 assets 重写规则 |
+
+---
+
+## POC2 — 高亮、查词与解锁（P0-06）
+
+### 范围
+
+在 POC1 基础上增加：
+
+- 10,000 词加载进内存 `Set`
+- HTML：文本节点注入 `span.word` + `flutter_widget_from_html`
+- TXT：`TextSpan` 逐词 + 虚线下划线
+- 单击词 → 假词典 JSON 查词 → 底部面板
+- 查词状态机四操作 + 当前块重绘
+- `parse_quota` 假解锁：`index>=40` 拦截至全屏页，模拟广告 +100
+
+### 通过指标
+
+| 指标 | 通过线 |
+|------|--------|
+| HTML 预处理（约 500 词/块） | < 200ms |
+| 标记「已会」后重绘 | < 300ms |
+| 单击查词（JSON 词典） | < 100ms |
+| 40,000 词 Set 冷启动加载 | < 500ms（后台 Isolate） |
+| 滚动掉帧 | < 5% 时间 |
+| 解锁边界 | index 39 可开，40 拦截 |
+
+### 失败预案
+
+| 现象 | 对策 |
+|------|------|
+| 预处理慢 | 缓存已注入 HTML 到旁文件 |
+| 渲染慢 | 换渲染库或缩小单块 |
+| 重绘闪屏 | 局部更新 span 而非整页 rebuild |
+| TXT 点击不准 | 调整 TextSpan recognizer |
+
+---
+
+## 流程
+
+```mermaid
+flowchart LR
+    poc1[POC1 导入分块] --> pass1{通过?}
+    pass1 -->|是| poc2[POC2 高亮查词解锁]
+    pass1 -->|否| fix1[调参]
+    fix1 --> poc1
+    poc2 --> pass2{通过?}
+    pass2 -->|是| report[poc-report.md]
+    pass2 -->|否| fix2[缓存或换库]
+    fix2 --> poc2
+    report --> mvpPlan[编写 mvp-plan.md]
+```
+
+---
+
+## 验收产出
+
+POC 完成后 `poc-report.md` 须包含：
+
+- 测试机型号与测试书名
+- 各项指标实测数据
+- 是否调整 12,000 字符 / 40 / 100 参数
+- `epubx` / `flutter_widget_from_html` 最终拍板结论
+- 是否进入 MVP 切片开发（是/否及阻塞项）

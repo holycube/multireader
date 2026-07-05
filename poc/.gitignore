@@ -1,0 +1,51 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Platform build outputs
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# IDE
+*.iml
+.idea/
+
+# Generated
+*.g.dart
+
+# Release signing (local only)
+android/key.properties
+android/*.jks
+*.jks
+
+# Release signing (see android/key.properties.example)
+android/key.properties
+**/*.jks
+**/*.keystore
+
+# Gradle wrapper caches (large)
+.gradle-local/
+.gradle-ship/
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Local debug logs
+build_debug_log*.txt
+test_result.txt
+
+# Compiled scratch files
+android/_tls_test.class

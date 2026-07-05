@@ -1,0 +1,1076 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "创建 Flutter POC 最小工程",
+        "description": "搭建独立 Flutter 最小工程，配置依赖与项目结构，为 POC1/POC2 验证做准备",
+        "details": "创建 poc/ 目录下的 Flutter 工程。pubspec.yaml 添加：drift、drift_flutter、sqlite3_flutter_libs、epubx、flutter_widget_from_html、path_provider、file_picker。建立 lib/ 基础目录结构：database/、import/、reader/、vocab/。配置 Android/iOS 最低版本。参照 docs/tech-stack.md 和 docs/poc-plan.md 执行约束（独立最小工程，非完整 App）。 验收：Windows 自动化测试 + Android 真机（荣耀 X50i）均已跑通。",
+        "testStrategy": "flutter pub get 成功；flutter run 能在 Android/iOS 模拟器启动空白页",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "安装 Flutter SDK 并配置 PATH",
+            "description": "Windows 安装 Flutter stable，将 C:\\src\\flutter\\bin 加入用户 PATH",
+            "details": "已完成：Flutter 3.44.3 @ C:\\src\\flutter。新终端需重开或运行 poc\\scripts\\setup-flutter-env.ps1。官方文档：https://docs.flutter.dev/get-started/install/windows",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 1,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "flutter doctor 与 Android 工具链",
+            "description": "运行 flutter doctor，补齐 Android cmdline-tools、接受 SDK 许可、创建 AVD",
+            "details": "已完成：flutter doctor 全部通过（cmdline-tools 已安装、SDK 许可已接受）。可选：Android Studio → Device Manager 创建 AVD 模拟器。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 1,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "bootstrap POC 工程",
+            "description": "在 poc/ 执行 bootstrap.ps1 生成平台工程并 flutter pub get",
+            "details": "已完成：android/ios/windows 等平台目录已生成；epubx 改为 ^4.0.0 后 pub get 成功。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 1,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "验收：模拟器启动空白页",
+            "description": "flutter run 在 Android 模拟器或 Windows 桌面显示「POC 工程已就绪」",
+            "details": "需开启 Windows 开发者模式（设置 → 隐私和安全性 → 开发者选项 → 开发人员模式）后执行 flutter run -d windows；或创建 Android AVD 后 flutter run。 已完成：Windows VM 自动化 + Android 真机 debug 运行通过。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 1,
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-06-24T10:10:16.000Z"
+      },
+      {
+        "id": 2,
+        "title": "实现 Drift 数据库 Schema（八表）",
+        "description": "按 data-model.md 定义并实现 books、chapters、content_blocks、reading_progress、known_words、vocab_entries、parse_quota、reading_stats_daily 八张表及 DAO",
+        "details": "参照 docs/data-model.md 和 refs/drift/examples/app 模式。创建 poc/lib/database/tables.dart 定义全部表；poc/lib/database/database.dart 含 DAO 与迁移。关键字段：content_blocks.globalBlockIndex（0-based）、parse_quota.unlockedBlockCount 默认 40、known_words 全局无 bookId。仅 Schema + DAO（insert/select/update）；内存 Set 加载由 #7 负责。验收：build_runner 通过；poc1_acceptance_test 验证八表与 parse_quota 默认值。",
+        "testStrategy": "build_runner 生成代码无报错；单元测试验证表创建、insert/select、parse_quota 默认值 freeAllowance=40",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-06-24T10:10:16.000Z"
+      },
+      {
+        "id": 3,
+        "title": "POC1：EPUB 导入与分块管线",
+        "description": "实现 epubx 解析 EPUB spine/目录，生成 Chapter + ContentBlock，复制资源到私有目录",
+        "details": "参照 refs/epubx 和 docs/refs-index/epubx.md。实现 lib/import/epub_importer.dart：解压 EPUB、读 spine 与目录、复制图片/CSS 到 books/{bookId}/assets/、重写 HTML 相对路径、按 12000 字符子切、写入 books/chapters/content_blocks/parse_quota 表。importStatus 流程：pending → complete/failed。参照 docs/poc-plan.md POC1 范围。 验收：poc/lib/import/epub_importer.dart 就绪；924 块网文 EPUB 真机导入通过（见 docs/poc-report.md）。",
+        "testStrategy": "导入 Gutenberg 带图 EPUB；验证 Chapter 记录、块文件生成、图片显示；单块加载 <800ms；300+ 块书内存峰值 <200MB",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-06-24T10:10:16.000Z"
+      },
+      {
+        "id": 4,
+        "title": "POC1：TXT 导入与分块管线",
+        "description": "实现 TXT 正则分章或按 12000 字符切块，生成 plain 类型 ContentBlock",
+        "details": "实现 lib/import/txt_importer.dart。优先正则匹配 Chapter N：/^\\s*(chapter|ch\\.?)\\s+(\\d{1,4}|[ivxlcdmIVXLCDM]+)\\b/im。无匹配则按 12000 字符切块，Chapter 标题「第 N 段」。storageType=plain，块文件存 .txt。同样写入八表并初始化 parse_quota。 验收：poc/lib/import/txt_importer.dart 就绪；310 块超长 TXT 真机通过（见 docs/poc-report.md）。",
+        "testStrategy": "导入超长 txt 网文；验证分章/切块正确；块切换 <500ms；连续加载 50 块内存稳定 <150MB",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-06-24T10:10:16.000Z"
+      },
+      {
+        "id": 5,
+        "title": "POC1：按块加载与基础渲染",
+        "description": "实现 ContentBlock 按块加载渲染，EPUB 用 widget_from_html，TXT 用 Text.rich，无高亮无查词",
+        "details": "实现 lib/reader/block_loader.dart 和 lib/reader/reader_screen.dart。按 storageType 分支：html → flutter_widget_from_html 渲染块 HTML；plain → Text.rich 显示纯文本。块末自动加载下一块。仅缓存当前块 ±1。POC1 不做词库与高亮。 验收：block_loader.dart、reader_screen.dart 就绪；EPUB/TXT 逐块阅读与性能指标达标。",
+        "testStrategy": "EPUB/TXT 均可逐块阅读；滚动帧率 ≥50fps；块切换 <500ms；带图 EPUB 图片正常",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "4"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-06-24T10:10:16.000Z"
+      },
+      {
+        "id": 6,
+        "title": "POC1 验收与 poc-report 第一部分",
+        "description": "按 poc-plan.md 指标验收 POC1，记录实测数据",
+        "details": "在中端 Android + iPhone 上测试。记录：单块加载时间、块切换时间、300+ 块导入内存、50 块连续加载内存、滚动帧率、带图 EPUB 显示。未通过则按失败预案调参（子切阈值 8000、Isolate 后台导入等）。",
+        "testStrategy": "全部 POC1 通过指标达标；撰写 poc-report.md 第一部分（测试机、书名、指标数据、epubx 初步结论）",
+        "priority": "high",
+        "dependencies": [
+          "5"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-06-23T13:55:03.353Z"
+      },
+      {
+        "id": 7,
+        "title": "POC2：词库内存 Set 与归一化",
+        "description": "实现 known_words 加载至内存 Set，词形归一化（小写、去首尾标点、缩写整词保留）",
+        "details": "lib/vocab/word_normalizer.dart：转小写、去首尾标点、don't 整词保留、不做词干化。lib/vocab/known_words_cache.dart：启动时从 Drift 加载至 Set<String>，O(1) 查询。支持 10000+ 词，40000 词冷启动 <500ms（Isolate 后台加载）。",
+        "testStrategy": "归一化单元测试覆盖 Bright/word,/don't/brightly；10000 词 Set 加载 <500ms；NOT IN Set 判定正确",
+        "priority": "high",
+        "dependencies": [
+          "2",
+          "6"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "实现词形归一化函数与单元测试",
+            "description": "lib/vocab/word_normalizer.dart：Unicode 小写、去首尾标点、缩写整词保留，不做词干化",
+            "details": "scenario-map：词归一化。文档：docs/tech-stack.md §6.1。产出 lib/vocab/word_normalizer.dart。单元测试覆盖 Bright→bright、\"word,\"→word、don't 整词保留、brightly 不还原。归一化结果供 data-word 与 Set 比对。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Drift known_words 加载至内存 Set",
+            "description": "lib/vocab/known_words_cache.dart：启动时 select(known_words) 填充 Set<String>",
+            "details": "scenario-map：词库加载到 Set。文档：docs/data-model.md §3.5 known_words；docs/tech-stack.md §2。refs：docs/refs-index/drift.md → refs/drift/examples/app/lib/database/database.dart（select(known_words).get()）。实现 loadKnownWords()，O(1) isKnown 查询。",
+            "status": "done",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 7,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Isolate 后台大批量词库加载",
+            "description": "40000 词冷启动 <500ms，主线程不阻塞",
+            "details": "scenario-map：跨管线内存词库 Set。使用 compute() 或独立 Isolate 从 Drift 读取并构建 Set，完成后回调主 Isolate 替换缓存。验收：10000+ 词加载 <500ms；进程启动 UI 可交互。",
+            "status": "done",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 7,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "接入应用启动与查询/变更 API",
+            "description": "暴露 isKnown、addKnown、removeKnown 供 #8/#9/#10 调用",
+            "details": "scenario-map：内存词库 Set（跨管线集成点）。在 main/app 启动流程调用 loadKnownWords()；变更时同步内存 Set 与 Drift（#10 状态机复用）。验收：NOT IN Set 判定正确；addKnown 后即时可查。",
+            "status": "done",
+            "dependencies": [
+              3
+            ],
+            "parentTaskId": 7,
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-06-24T00:00:00.000Z"
+      },
+      {
+        "id": 8,
+        "title": "POC2：HTML 高亮 span 注入",
+        "description": "EPUB 块预处理：遍历 HTML 文本节点注入 span.word，unknown 词加虚线下划线",
+        "details": "lib/reader/html_highlighter.dart：遍历文本节点，比对 known_words Set，注入 <span class=\"word unknown\" data-word=\"bright\">bright</span>。扩展 flutter_widget_from_html WidgetFactory 处理 span.word 点击。参照 refs/fwfh 和 docs/refs-index/fwfh.md。预处理约 500 词/块 <200ms。",
+        "testStrategy": "unknown 词显示虚线下划线；known 词正常；预处理 <200ms；标记「已会」后重绘 <300ms",
+        "priority": "high",
+        "dependencies": [
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "读块 HTML 与 DOM 文本节点遍历",
+            "description": "html 包解析块 HTML，遍历文本节点，跳过 script/style",
+            "details": "scenario-map：HTML 文本节点遍历。文档：docs/tech-stack.md §3.3。产出 lib/reader/html_highlighter.dart 遍历层。从 contentPath 读块文件，保留非文本结构。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 8,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "切词比对 Set 并注入 span.word",
+            "description": "注入 <span class=\"word unknown/known\" data-word=\"...\"> 保持原显示文本",
+            "details": "scenario-map：注入 span.word。文档：docs/tech-stack.md §6.3。复用 #7 word_normalizer 与 KnownWordsCache。示例：<span class=\"word unknown\" data-word=\"bright\">Bright</span>。",
+            "status": "done",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 8,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "预处理计时与可选旁文件缓存",
+            "description": "500 词/块预处理 <200ms；超时写入缓存 HTML",
+            "details": "scenario-map：poc-plan POC2 失败预案。文档：docs/poc-plan.md（预处理 <200ms）。超阈值时将已注入 HTML 写入旁文件，下次直读缓存。",
+            "status": "done",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 8,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "WordTapWidgetFactory 注册 BuildOp 与词点击",
+            "description": "扩展 WidgetFactory 处理 span.word 点击手势",
+            "details": "scenario-map：自定义 WidgetFactory、span 词点击。refs：docs/refs-index/fwfh.md → core_widget_factory.dart、tag_a.dart（buildGestureRecognizer）。产出 lib/reader/word_tap_factory.dart。回调 onWordTap(normalized, isUnknown)。",
+            "status": "done",
+            "dependencies": [
+              2,
+              5
+            ],
+            "parentTaskId": 8,
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "unknown 词虚线下划线样式",
+            "description": ".word.unknown 显示 dashed underline",
+            "details": "scenario-map：虚线下划线样式。文档：docs/tech-stack.md §6.2。refs：style_text_decoration.dart。优先预处理 CSS class + 内联 style，减少 BuildOp 复杂度。",
+            "status": "done",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 8,
+            "parentId": "undefined"
+          },
+          {
+            "id": 6,
+            "title": "集成 HtmlWidget 与标记已会局部重绘",
+            "description": "HtmlWidget 渲染高亮 HTML；仅当前块 key/setState 重绘 <300ms",
+            "details": "scenario-map：HTML 渲染带高亮、标记已会后重绘当前块。refs：core_html_widget.dart。接入 reader_screen；#10 操作后仅刷新当前 ContentBlock，避免整页闪屏。",
+            "status": "done",
+            "dependencies": [
+              4
+            ],
+            "parentTaskId": 8,
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-06-24T00:00:00.000Z"
+      },
+      {
+        "id": 9,
+        "title": "POC2：TXT TextSpan 逐词高亮",
+        "description": "TXT 块按空白切词，构建 TextSpan 列表，unknown 词虚线下划线",
+        "details": "lib/reader/txt_highlighter.dart：读 plain 块 → 切词 → 归一化 → 比对 Set → TextSpan(decoration: dashed underline) 或正常。TapGestureRecognizer 回调归一化词形。与 EPUB 共用查词面板与重绘逻辑。",
+        "testStrategy": "TXT 逐词高亮与 EPUB 视觉一致；单击词触发回调；点击区域准确",
+        "priority": "high",
+        "dependencies": [
+          "7"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "plain 块按空白切词",
+            "description": "读 plain 块文本，按空白切词，保留原词显示文本",
+            "details": "scenario-map：TXT TextSpan 逐词。文档：docs/tech-stack.md §3.6。产出 lib/reader/txt_highlighter.dart 切词层。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 9,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "归一化比对 Set 构建 TextSpan 列表",
+            "description": "unknown 词 TextDecoration.dashed underline，known 词无额外样式",
+            "details": "scenario-map：词归一化（复用 #7）、TXT TextSpan 逐词。文档：docs/tech-stack.md §4、§6.2。视觉与 EPUB #8 一致。",
+            "status": "done",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 9,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "TapGestureRecognizer 逐词点击",
+            "description": "每词独立 recognizer，回调归一化词形，点击区域准确",
+            "details": "scenario-map：TXT TextSpan 逐词。refs：点击模式参照 tag_a.dart。回调签名 onWordTap(normalized, isUnknown) 与 #8 统一。",
+            "status": "done",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 9,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "接入 reader_screen plain 分支",
+            "description": "storageType=plain 走 txt_highlighter，与 EPUB 共用查词入口",
+            "details": "scenario-map：跨管线块切换。在 reader_screen 按 storageType 分支；块切换时重建 TextSpan 列表；预留 #10 lookup 回调。",
+            "status": "done",
+            "dependencies": [
+              3
+            ],
+            "parentTaskId": 9,
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-06-24T00:00:00.000Z"
+      },
+      {
+        "id": 10,
+        "title": "POC2：查词面板与状态机",
+        "description": "单击词弹出底部查词面板，实现已会/收藏/加入生词本/确认已会四操作及当前块重绘",
+        "details": "lib/reader/lookup_panel.dart：底部 showModalBottomSheet。假 JSON 词典（3-5k 词）查词 <100ms。按 docs/data-model.md §9 状态机写入 known_words/vocab_entries，同步更新内存 Set，仅重绘当前 ContentBlock。参照 PRD §3.8。",
+        "testStrategy": "四操作表写入正确；高亮即时变化；查词 <100ms；仅当前块重绘无整页闪屏",
+        "priority": "high",
+        "dependencies": [
+          "8",
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "假 JSON 词典加载与 Map 查找",
+            "description": "assets 3–5k 词英中 JSON，内存 Map 查找 <100ms",
+            "details": "scenario-map：假词典 JSON 查词。文档：docs/tech-stack.md §7。产出 lib/vocab/dict_loader.dart。首次启动复制或随包加载；lookup(word) 目标 <100ms。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 10,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "lookup_panel 底部查词 UI",
+            "description": "showModalBottomSheet 显示释义与四操作按钮",
+            "details": "scenario-map：查词面板。文档：docs/user-flow.md 查词流程。产出 lib/reader/lookup_panel.dart。显示原词、释义、已会/收藏/加入生词本/确认已会。 POC2 仅四操作（已会/收藏/加入生词本/确认已会）；取消收藏 MVP #15 再做。",
+            "status": "done",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 10,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "查词状态机四操作 DAO 写入",
+            "description": "按 data-model §9 表写入 known_words / vocab_entries",
+            "details": "scenario-map：查词状态机四操作。文档：docs/data-model.md §9。产出 lib/reader/word_lookup_service.dart。已会 INSERT known_words；收藏 INSERT/UPDATE vocab_entries；加入生词本 DELETE known + INSERT vocab；确认已会幂等 INSERT。",
+            "status": "done",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 10,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "内存 Set 与 Drift 同步",
+            "description": "操作后同步 KnownWordsCache addKnown/removeKnown",
+            "details": "scenario-map：内存词库 Set。状态机写入后即时更新内存 Set，保证高亮判定 O(1) 且与 DB 一致。",
+            "status": "done",
+            "dependencies": [
+              3
+            ],
+            "parentTaskId": 10,
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "触发当前块重绘（HTML+TXT）",
+            "description": "四操作后仅重绘当前 ContentBlock，高亮即时变化无整页闪屏",
+            "details": "scenario-map：标记已会后重绘当前块。联动 #8 HtmlWidget key 刷新与 #9 TextSpan 重建。验收：重绘 <300ms。",
+            "status": "done",
+            "dependencies": [
+              4
+            ],
+            "parentTaskId": 10,
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-06-24T00:00:00.000Z"
+      },
+      {
+        "id": 11,
+        "title": "POC2：假解锁与 parse_quota 边界",
+        "description": "实现 globalBlockIndex >= unlockedBlockCount 时全屏解锁页，模拟广告 +100 块",
+        "details": "lib/reader/unlock_screen.dart：index>=40 拦截；全屏页文案「已读 x 段」「解锁 100 段」；模拟「观看 3 秒」按钮代替 SDK；成功后 unlockedBlockCount += 100。验证 index 39 可开、40 拦截。依赖 #8+#9（可与 #10 查词面板并行开发）。参照 PRD §5.2-5.4。",
+        "testStrategy": "index 39 可预处理；index 40 显示解锁页；模拟广告后 +100；无网络可读已解锁块",
+        "priority": "high",
+        "dependencies": [
+          "8",
+          "9"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "块加载前 parse_quota 守卫",
+            "description": "globalBlockIndex >= unlockedBlockCount 时拦截，不加载块内容",
+            "details": "scenario-map：parse_quota 拦截 index>=40。文档：docs/data-model.md §3.7 parse_quota；docs/poc-plan.md 解锁边界。在 block_loader/reader_screen 加载前查询 parse_quota；默认 freeAllowance=40。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 11,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "unlock_screen 全屏解锁 UI",
+            "description": "全屏页文案「已读 x 段」「解锁 100 段」",
+            "details": "scenario-map：假广告解锁 +100。文档：docs/PRD-v0.2.md §5.4。产出 lib/reader/unlock_screen.dart。显示当前已解锁块数与本次可解锁 +100 说明。",
+            "status": "done",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 11,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "模拟广告 3 秒与 DAO 更新 +100",
+            "description": "模拟「观看 3 秒」按钮，成功后 unlockedBlockCount += 100",
+            "details": "scenario-map：假广告解锁 +100。refs：docs/refs-index/drift.md DAO update 范例。无真实广告 SDK；更新 parse_quota 后返回阅读器继续加载。",
+            "status": "done",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 11,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "边界验收 index 39/40",
+            "description": "index 39 可预处理与阅读；index 40 显示解锁页",
+            "details": "scenario-map：parse_quota 拦截。验收：index 39 块正常高亮阅读（查词端到端在 #12 联调）；index 40 拦截至 unlock_screen；模拟广告后 +100 可继续。无网络可读已解锁块。注：#11 不依赖 #10，解锁可与查词面板并行开发。",
+            "status": "done",
+            "dependencies": [
+              3
+            ],
+            "parentTaskId": 11,
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-06-24T00:00:00.000Z"
+      },
+      {
+        "id": 12,
+        "title": "POC2 验收与 poc-report 完成",
+        "description": "按 poc-plan.md 验收 POC2，完成 poc-report.md，确认 epubx/fwfh 最终拍板",
+        "details": "验收全部 POC2 指标。poc-report.md 须含：测试机、书名、指标数据、是否调整 12000/40/100 参数、epubx 与 flutter_widget_from_html 最终结论、是否进入 MVP。通过后更新 project-roadmap 阶段⑥为已完成。",
+        "testStrategy": "POC2 全部通过；poc-report.md 完整；路线图更新",
+        "priority": "high",
+        "dependencies": [
+          "11"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "双机测试环境与测试书准备",
+            "description": "中端 Android + iPhone；Gutenberg 带图 EPUB + 超长 txt",
+            "details": "scenario-map：跨管线块切换（验收环境）。文档：docs/poc-plan.md 执行约束。记录测试机型号与测试书名，供 poc-report 使用。",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 12,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "POC2 六项指标实测",
+            "description": "预处理/重绘/查词/Set 冷启动/掉帧/解锁边界",
+            "details": "scenario-map：poc-plan POC2 通过指标。HTML 预处理 <200ms；标记已会重绘 <300ms；查词 <100ms；40000 词 Set 冷启动 <500ms；滚动掉帧 <5%；index 39/40 边界。",
+            "status": "done",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 12,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "失败预案调参记录",
+            "description": "记录是否启用 HTML 缓存、局部重绘、子切阈值等调参",
+            "details": "scenario-map：poc-plan 失败预案。若未达标，记录缓存旁文件、WidgetFactory 优化、块大小调整等对策及实测结果。",
+            "status": "done",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 12,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "撰写 poc-report.md 完整版",
+            "description": "合并 POC1+POC2 数据；epubx/fwfh 最终拍板结论",
+            "details": "scenario-map：跨管线阅读进度（顺带记录）。文档：docs/poc-plan.md 验收产出。须含：测试机、书名、指标数据、是否调整 12000/40/100、库拍板、是否进入 MVP 及阻塞项。",
+            "status": "done",
+            "dependencies": [
+              2,
+              3
+            ],
+            "parentTaskId": 12,
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "更新 project-roadmap 阶段⑥",
+            "description": "POC 通过后标记路线图阶段⑥为已完成",
+            "details": "更新 .cursor/rules/project-roadmap.mdc 阶段⑥ poc-report.md 为已完成。依赖 poc-report 验收结论为通过或附阻塞项说明。",
+            "status": "done",
+            "dependencies": [
+              4
+            ],
+            "parentTaskId": 12,
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-06-24T00:00:00.000Z"
+      },
+      {
+        "id": 13,
+        "title": "MVP：书架列表 UI",
+        "description": "实现默认首页书架：列表布局、封面、进度、最近阅读排序",
+        "details": "lib/screens/bookshelf_screen.dart。列表非网格；48×72 封面或占位；书名 1 行省略；进度条+百分比；相对时间；按 reading_progress.updatedAt 降序；空状态引导导入。仅显示 importStatus=complete 的书。参照 PRD §3.1 P1-08。",
+        "testStrategy": "导入书后书架显示；点击进阅读器；排序正确；空状态 UI 正常",
+        "priority": "medium",
+        "dependencies": [
+          "12",
+          "20"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "书架列表布局与 BookCard 组件",
+            "description": "列表非网格；48×72 封面或占位；书名 1 行省略；作者灰色小字",
+            "details": "文档：docs/PRD-v0.2.md §3.1 P1-08。产出 lib/screens/bookshelf_screen.dart、lib/widgets/book_card.dart。无封面时占位图 + 书名首字。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 13,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "reading_progress 查询与进度条",
+            "description": "细进度条 + 百分比；0% 不显示「未开始」",
+            "details": "文档：docs/data-model.md §reading_progress。公式：(globalBlockIndex + charOffset/charCount) / totalBlocks。Drift join books + reading_progress。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 13,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "最近阅读排序与相对时间",
+            "description": "按 reading_progress.updatedAt 降序；刚刚/今天/昨天/N 天前",
+            "details": "文档：docs/PRD-v0.2.md §3.1。仅显示 importStatus=complete 的书。",
+            "status": "pending",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 13,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "空状态与导入入口",
+            "description": "引导「导入书籍」与「前往资源」；file_picker 导入 epub/txt",
+            "details": "文档：docs/user-flow.md §2。空状态 UI；导入调用现有 epub_importer/txt_importer。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 13,
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "点击卡片进入阅读器",
+            "description": "书架卡片 onTap 路由至 reader_screen 并传入 bookId",
+            "details": "文档：docs/user-flow.md §2。验收：导入书后书架显示；点击进阅读器；排序正确。",
+            "status": "pending",
+            "dependencies": [
+              3,
+              4
+            ],
+            "parentTaskId": 13,
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": 14,
+        "title": "MVP：阅读器完整交互",
+        "description": "顶底栏沉浸模式、章节目录抽屉、块末自动衔接、阅读进度保存",
+        "details": "基于 #10 完成后的 reader_screen 增量开发（非 POC1 #5 基础版）。lib/reader/reader_screen.dart 完善：点击正文切换顶底栏；章节目录列出 Chapter 表，点击跳转 blockOrderInChapter=0；滚至块末加载下一块；charOffset 保存至 reading_progress。参照 PRD §3.4 和 user-flow.md。",
+        "testStrategy": "目录跳转正确；进度保存与恢复；块衔接流畅；沉浸模式切换正常",
+        "priority": "medium",
+        "dependencies": [
+          "12",
+          "20"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "顶底栏沉浸模式切换",
+            "description": "单击非词区域切换顶底栏显示/隐藏",
+            "details": "文档：docs/PRD-v0.2.md §3.4。在 #10 查词点击与沉浸点击手势间区分：词点击→查词面板，非词→切换栏。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 14,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "章节目录 Drawer 与 Chapter 列表",
+            "description": "目录按钮打开 Drawer，列出 Chapter 表",
+            "details": "文档：docs/user-flow.md §5。SELECT chapters WHERE bookId ORDER BY orderIndex。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 14,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "目录跳转至章首块",
+            "description": "点击第 N 章 → blockOrderInChapter=0 的 ContentBlock",
+            "details": "文档：docs/data-model.md §chapters 目录跳转规则。更新 reading_progress 后渲染目标块。",
+            "status": "pending",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 14,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "块末自动加载下一块",
+            "description": "滚至块末加载下一块；跨章时顶栏章标题更新",
+            "details": "文档：docs/PRD-v0.2.md §3.4。复用 POC1 block_loader；globalBlockIndex 递增取下一块。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 14,
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "charOffset 读写与阅读位置恢复",
+            "description": "块内滚动时保存 charOffset 至 reading_progress；重开恢复位置",
+            "details": "文档：docs/data-model.md §reading_progress。insertOnConflictUpdate；与字体/设备无关的字符偏移。",
+            "status": "pending",
+            "dependencies": [
+              3,
+              4
+            ],
+            "parentTaskId": 14,
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "title": "MVP：词库冷启动向导",
+        "description": "首次启动 3 步向导：欢迎、选择等级/导入词表、确认写入 known_words",
+        "details": "lib/screens/vocab_wizard/。3 步：欢迎说明 → 预置等级（cet4/cet6/toefl/advanced 叠加）或 txt/csv 导入 → 确认词数批量写入。可跳过；跳过后阅读器轻提示。设置页支持重选追加、重置、词表导入。参照 PRD §3.3 P1-07。",
+        "testStrategy": "首次启动显示向导；四级约 4500 词写入；跳过后提示；重选追加不覆盖",
+        "priority": "medium",
+        "dependencies": [
+          "12",
+          "20"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "屏1 欢迎页与跳过逻辑",
+            "description": "说明词汇量用途；「开始设置」/「稍后再说」",
+            "details": "文档：docs/user-flow.md §1。产出 lib/screens/vocab_wizard/welcome_step.dart。跳过直接进入书架。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 15,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "屏2 预置等级选择",
+            "description": "cet4/cet6/toefl/advanced 高级叠加低级",
+            "details": "文档：docs/PRD-v0.2.md §3.3。source 标识 preset_cet4 等；加载预置词表 assets。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 15,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "屏2 txt/csv 词表导入",
+            "description": "次要入口：每行一词或 word 列解析",
+            "details": "文档：docs/PRD-v0.2.md §3.3。file_picker 选文件；source=import_file。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 15,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "屏3 确认词数与批量写入",
+            "description": "展示将标记为已会的词数；批量 INSERT known_words",
+            "details": "文档：docs/data-model.md §known_words。归一化后写入；显示写入进度。",
+            "status": "pending",
+            "dependencies": [
+              2,
+              3
+            ],
+            "parentTaskId": 15,
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "reload Set 与跳过后轻提示",
+            "description": "写入后 reload KnownWordsCache；词库为空时阅读器轻提示",
+            "details": "文档：docs/user-flow.md §1 跳过路径。复用 #7 KnownWordsCache；首次进阅读器可关闭提示条。",
+            "status": "pending",
+            "dependencies": [
+              4
+            ],
+            "parentTaskId": 15,
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": 16,
+        "title": "MVP：主导航与信息架构",
+        "description": "实现书架/统计/词库/资源/设置五 Tab 主导航",
+        "details": "lib/app.dart 或 lib/screens/main_shell.dart。BottomNavigationBar 或类似：书架（默认）、统计、词库、资源、设置。各 Tab 占位或基础页面。参照 PRD §4 信息架构 mermaid 图。",
+        "testStrategy": "五 Tab 可切换；书架为默认首页；导航状态保持",
+        "priority": "medium",
+        "dependencies": [
+          "13",
+          "20"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "main_shell 五 Tab 骨架",
+            "description": "BottomNavigationBar：书架/统计/词库/资源/设置",
+            "details": "文档：docs/PRD-v0.2.md §4。产出 lib/screens/main_shell.dart。IndexedStack 保持 Tab 状态。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 16,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "书架 Tab 接入 bookshelf_screen",
+            "description": "默认 Tab 嵌入 #13 书架页",
+            "details": "文档：docs/user-flow.md §2。书架为 App 默认首页。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 16,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "统计/词库/资源/设置 Tab 占位页",
+            "description": "各 Tab 基础 Scaffold 占位，待 #17/#18/#19 填充",
+            "details": "文档：docs/PRD-v0.2.md §4。lib/screens/stats_screen.dart 等占位。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 16,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "app.dart 路由与启动集成",
+            "description": "MaterialApp 路由；首次启动词库向导 vs 主壳",
+            "details": "文档：docs/user-flow.md §1。检查 known_words 是否为空决定显示向导或 main_shell。",
+            "status": "pending",
+            "dependencies": [
+              2,
+              3
+            ],
+            "parentTaskId": 16,
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": 17,
+        "title": "MVP：阅读统计页",
+        "description": "每日阅读时长、新词习得曲线、词汇量概览",
+        "details": "lib/screens/stats_screen.dart。读写 reading_stats_daily；展示每日分钟数趋势、known_words 增长曲线、已知词数/生词本词数。参照 PRD §3.5 P1。",
+        "testStrategy": "阅读后 stats 更新；图表展示历史；词汇量数字正确",
+        "priority": "medium",
+        "dependencies": [
+          "16",
+          "20"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "reading_stats_daily DAO 读写",
+            "description": "按日期/书籍读写 minutes 与 newWordsCount",
+            "details": "文档：docs/data-model.md §reading_stats_daily。阅读器退出或块切换时累加分钟数。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 17,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "每日阅读分钟数趋势图",
+            "description": "近 7/30 天阅读时长折线图",
+            "details": "文档：docs/PRD-v0.2.md §3.5。可用 fl_chart 或简易 CustomPaint。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 17,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "known_words 增长曲线",
+            "description": "按 addedAt 聚合的新词习得趋势",
+            "details": "文档：docs/PRD-v0.2.md §3.5。SELECT COUNT GROUP BY date(addedAt)。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 17,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "词汇量概览数字",
+            "description": "已知词数、生词本词数核心数字展示",
+            "details": "文档：docs/PRD-v0.2.md §3.5。COUNT known_words；COUNT vocab_entries。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 17,
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": 18,
+        "title": "MVP：资源页与导入教程",
+        "description": "合法书源链接（Gutenberg、Standard Ebooks）及浏览器导入教程",
+        "details": "lib/screens/resources_screen.dart。收录 Project Gutenberg、Standard Ebooks 等链接；附带「如何从浏览器下载并导入本 App」图文指引。不做书源聚合。参照 PRD §3.1。",
+        "testStrategy": "链接可打开；教程步骤清晰；无盗版资源",
+        "priority": "low",
+        "dependencies": [
+          "16",
+          "20"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "合法书源链接列表",
+            "description": "Gutenberg、Standard Ebooks 等公版书渠道",
+            "details": "文档：docs/PRD-v0.2.md §3.1。静态列表；明确不做书源聚合。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 18,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "url_launcher 打开外部链接",
+            "description": "点击链接在系统浏览器打开",
+            "details": "产出 lib/screens/resources_screen.dart。pubspec 添加 url_launcher。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 18,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "浏览器下载导入图文教程",
+            "description": "「如何从浏览器下载并导入本 App」步骤指引",
+            "details": "文档：docs/PRD-v0.2.md §3.1。图文步骤：下载 epub → 分享到 App / 文件管理器导入。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 18,
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "title": "MVP：设置页与词库管理",
+        "description": "词汇量设置、词典下载占位、已知词数查看、重置词库",
+        "details": "lib/screens/settings_screen.dart。词库 Tab：已知词数、重选等级、重置、词表导入。设置：词汇量入口、词典下载（P1 占位）。参照 PRD §3.3 后续管理。",
+        "testStrategy": "重置后词库清空；重选追加合并；设置项可访问",
+        "priority": "medium",
+        "dependencies": [
+          "15",
+          "16",
+          "20"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "settings_screen 基础布局",
+            "description": "设置列表：词汇量、词典下载、关于等",
+            "details": "文档：docs/PRD-v0.2.md §3.3 后续管理。产出 lib/screens/settings_screen.dart。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 19,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "已知词数展示与重置词库",
+            "description": "显示 COUNT known_words；重置清空表并 reload Set",
+            "details": "文档：docs/user-flow.md §1。DELETE known_words；确认对话框防误触。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 19,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "重选等级追加合并",
+            "description": "复用 #15 屏2 逻辑；不覆盖已有 known_words",
+            "details": "文档：docs/PRD-v0.2.md §3.3。INSERT OR IGNORE 或去重后批量 INSERT。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 19,
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "词表文件导入入口",
+            "description": "设置页 txt/csv 词表导入，同向导",
+            "details": "文档：docs/PRD-v0.2.md §3.3。复用 #15 导入解析逻辑。",
+            "status": "pending",
+            "dependencies": [
+              3
+            ],
+            "parentTaskId": 19,
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "词典下载 P1 占位 UI",
+            "description": "词典下载入口占位，提示「即将推出」",
+            "details": "文档：docs/tech-stack.md §7 P1。MVP 不实现真实下载。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 19,
+            "parentId": "undefined"
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "title": "编写 mvp-plan.md 与数据流图",
+        "description": "POC 通过后编写 MVP 迭代计划与 data-flow.drawio",
+        "details": "docs/mvp-plan.md：按 P0/P1 切片 Sprint 计划。docs/diagrams/data-flow.drawio：导入、阅读、查词、解锁数据流。更新 project-roadmap 阶段⑦⑧。参照路线图开发流水线。须在 #13–#19 MVP 编码之前完成。",
+        "testStrategy": "mvp-plan.md 含 Sprint 切片；data-flow.drawio 可打开；路线图状态更新",
+        "priority": "medium",
+        "dependencies": [
+          "12"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "绘制 data-flow.drawio",
+            "description": "导入、阅读、查词、解锁四条数据流",
+            "details": "文档：project-roadmap 阶段⑤。产出 docs/diagrams/data-flow.drawio。覆盖 EPUB/TXT 双管线与 parse_quota。",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 20,
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "编写 mvp-plan.md Sprint 切片",
+            "description": "按 P0/P1 功能切片 MVP 迭代计划",
+            "details": "文档：project-roadmap 阶段⑦。产出 docs/mvp-plan.md。引用 #13–#19 任务映射 Sprint。",
+            "status": "pending",
+            "dependencies": [
+              1
+            ],
+            "parentTaskId": 20,
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "更新 project-roadmap 阶段⑦⑧",
+            "description": "标记数据流图与 mvp-plan 为已完成",
+            "details": "更新 .cursor/rules/project-roadmap.mdc 阶段⑤⑦⑧状态。",
+            "status": "pending",
+            "dependencies": [
+              2
+            ],
+            "parentTaskId": 20,
+            "parentId": "undefined"
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-06-24T12:00:00.000Z",
+      "taskCount": 20,
+      "completedCount": 6,
+      "tags": [
+        "master"
+      ],
+      "created": "2026-06-24T07:52:28.037Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

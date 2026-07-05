@@ -1,0 +1,15 @@
+﻿{
+    "version":  "2",
+    "files":  {
+                  "mvp_dict_aliases.json":  {
+                                                "sizeBytes":  678468,
+                                                "url":  "https://cdn.example.com/dict/v1/mvp_dict_aliases.json",
+                                                "sha256":  "ed755a6e509578ab4a77263e84d5f3b80f04ad902fad0083cfb9793ead431c68"
+                                            },
+                  "mvp_dict.json":  {
+                                        "sizeBytes":  6328036,
+                                        "url":  "https://cdn.example.com/dict/v1/mvp_dict.json",
+                                        "sha256":  "2bee2c1fe375f8083bd70eedf9940bc02753ccf9c4a7e7ea5e00454f7a26baab"
+                                    }
+              }
+}

@@ -1,0 +1,254 @@
+<mxfile host="app.diagrams.net" agent="A0-docs-flow" version="22.1.0" type="device">
+  <diagram id="data-flow" name="data-flow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="2000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="小说阅读器 MVP 数据流图&#xa;依据 data-model.md v1.1 · tech-stack.md v1.0" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="800" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ========== Flow 1: Import ========== -->
+        <mxCell id="lane1" value="① 导入流（EPUB / TXT）" style="swimlane;whiteSpace=wrap;html=1;startSize=32;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="1320" height="420" as="geometry" />
+        </mxCell>
+
+        <mxCell id="imp-user" value="用户&#xa;file_picker 选文件" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane1">
+          <mxGeometry x="30" y="60" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-format" value="sourceFormat?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane1">
+          <mxGeometry x="200" y="55" width="110" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-pending" value="Drift&#xa;INSERT books&#xa;importStatus=pending" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane1">
+          <mxGeometry x="360" y="60" width="150" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- EPUB branch -->
+        <mxCell id="imp-epub" value="EPUB 管线&#xa;epubx 解压 spine/目录" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane1">
+          <mxGeometry x="30" y="170" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-epub-assets" value="FileSystem&#xa;复制 assets/&#xa;重写 HTML 相对路径" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane1">
+          <mxGeometry x="220" y="160" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-epub-split" value="&gt;12,000 字符?&#xa;子切多块" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane1">
+          <mxGeometry x="410" y="160" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-epub-save" value="FileSystem&#xa;block_NNNN.html&#xa;storageType=html" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane1">
+          <mxGeometry x="570" y="165" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- TXT branch -->
+        <mxCell id="imp-txt" value="TXT 管线&#xa;正则分章 / 12000 切块" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane1">
+          <mxGeometry x="30" y="280" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-txt-save" value="FileSystem&#xa;block_NNNN.txt&#xa;storageType=plain" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane1">
+          <mxGeometry x="220" y="280" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-txt-title" value="无章节匹配 →&#xa;Chapter 标题「第 N 段」" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#666666;" vertex="1" parent="lane1">
+          <mxGeometry x="30" y="350" width="200" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Common DB writes -->
+        <mxCell id="imp-db-ch" value="Drift&#xa;INSERT chapters&#xa;INSERT content_blocks&#xa;globalBlockIndex 递增" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane1">
+          <mxGeometry x="780" y="170" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-quota-init" value="Drift&#xa;INSERT parse_quota&#xa;unlockedBlockCount=totalBlocks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane1">
+          <mxGeometry x="1000" y="170" width="180" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-complete" value="Drift&#xa;UPDATE books&#xa;importStatus=complete&#xa;书架可见" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="lane1">
+          <mxGeometry x="1220" y="170" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="imp-fail" value="异常 →&#xa;importStatus=failed&#xa;书架不展示" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="lane1">
+          <mxGeometry x="1000" y="300" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Import edges -->
+        <mxCell id="e-imp1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-user" target="imp-format"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-format" target="imp-pending"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp3" value="epub" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-format" target="imp-epub"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp4" value="txt" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-format" target="imp-txt"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-epub" target="imp-epub-assets"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-epub-assets" target="imp-epub-split"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-epub-split" target="imp-epub-save"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-txt" target="imp-txt-save"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-epub-save" target="imp-db-ch"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-txt-save" target="imp-db-ch"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-db-ch" target="imp-quota-init"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-imp12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane1" source="imp-quota-init" target="imp-complete"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ========== Flow 2: Reading ========== -->
+        <mxCell id="lane2" value="② 阅读流（双管线）" style="swimlane;whiteSpace=wrap;html=1;startSize=32;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="530" width="1320" height="340" as="geometry" />
+        </mxCell>
+
+        <mxCell id="read-open" value="打开书籍&#xa;ReaderScreen(bookId)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane2">
+          <mxGeometry x="30" y="55" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="read-progress" value="Drift&#xa;读 reading_progress&#xa;chapterId / blockId / charOffset" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane2">
+          <mxGeometry x="210" y="50" width="180" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="read-meta" value="Drift&#xa;读 content_blocks 元数据&#xa;globalBlockIndex / contentPath" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane2">
+          <mxGeometry x="420" y="50" width="190" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="read-type" value="storageType?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane2">
+          <mxGeometry x="650" y="50" width="110" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="read-html" value="html 管线&#xa;读 block_NNNN.html&#xa;注入 span.word&#xa;fwfh 渲染" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane2">
+          <mxGeometry x="560" y="160" width="160" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="read-plain" value="plain 管线&#xa;读 block_NNNN.txt&#xa;切词 TextSpan&#xa;Text.rich 渲染" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane2">
+          <mxGeometry x="760" y="160" width="160" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="read-set" value="内存 Set&lt;String&gt;&#xa;known_words O(1) 比对&#xa;unknown → 虚线下划线" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane2">
+          <mxGeometry x="960" y="155" width="170" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="read-offset" value="按 charOffset&#xa;恢复阅读位置&#xa;（与字体无关）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane2">
+          <mxGeometry x="30" y="160" width="150" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="read-save" value="滚动时&#xa;UPDATE reading_progress&#xa;charOffset / updatedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane2">
+          <mxGeometry x="210" y="160" width="170" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="read-next" value="块末 → 加载下一块&#xa;globalBlockIndex+1&#xa;（v1.0 全书可读）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane2">
+          <mxGeometry x="420" y="270" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="read-toc" value="目录 Drawer&#xa;Chapter → 章首块&#xa;blockOrderInChapter=0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="lane2">
+          <mxGeometry x="650" y="270" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="read-progress-pct" value="书架进度% =&#xa;(globalBlockIndex + charOffset/charCount) / totalBlocks" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#666666;" vertex="1" parent="lane2">
+          <mxGeometry x="860" y="275" width="320" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e-rd1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-open" target="read-progress"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-progress" target="read-meta"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-meta" target="read-type"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd4" value="html" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-type" target="read-html"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd5" value="plain" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-type" target="read-plain"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-html" target="read-set"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-plain" target="read-set"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="lane2" source="read-offset" target="read-html"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-rd9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-set" target="read-save"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1045" y="120" /><mxPoint x="295" y="120" /></Array></mxGeometry></mxCell>
+        <mxCell id="e-rd10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane2" source="read-save" target="read-next"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ========== Flow 3: Lookup / State Machine ========== -->
+        <mxCell id="lane3" value="③ 查词与状态机" style="swimlane;whiteSpace=wrap;html=1;startSize=32;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="890" width="1320" height="380" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lk-tap" value="点击词 span&#xa;归一化词形&#xa;（小写·去标点）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane3">
+          <mxGeometry x="30" y="55" width="150" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="lk-dict" value="JSON 词典 Map&#xa;释义 &lt;100ms" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane3">
+          <mxGeometry x="210" y="55" width="130" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="lk-sheet" value="居中查词卡 Dialog&#xa;showGeneralDialog" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane3">
+          <mxGeometry x="370" y="55" width="160" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="lk-check" value="word ∈&#xa;known_words Set?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane3">
+          <mxGeometry x="570" y="50" width="130" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lk-unknown" value="状态: Unknown&#xa;高亮（虚线下划线）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane3">
+          <mxGeometry x="750" y="45" width="150" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="lk-known" value="状态: Known&#xa;无额外高亮" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane3">
+          <mxGeometry x="750" y="120" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Action table -->
+        <mxCell id="lk-table" value="&lt;b&gt;用户操作 → 表写入 → 高亮&lt;/b&gt;&lt;br&gt;&lt;br&gt;已会（生词）: INSERT known_words → 高亮消失&lt;br&gt;收藏（生词）: INSERT/UPDATE vocab_entries starred=true → 高亮保持&lt;br&gt;加入生词本（熟词）: DELETE known_words + INSERT vocab_entries → 高亮出现&lt;br&gt;确认已会（熟词）: INSERT known_words 幂等 → 高亮保持&lt;br&gt;取消收藏: UPDATE vocab_entries starred=false → 高亮不变&lt;br&gt;&lt;br&gt;高亮判定仅看 known_words Set；vocab_entries 为生词本元数据" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;align=left;spacingLeft=8;fontSize=11;" vertex="1" parent="lane3">
+          <mxGeometry x="30" y="160" width="520" height="190" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lk-redraw" value="仅重绘当前块&#xa;更新内存 Set" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane3">
+          <mxGeometry x="600" y="220" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="lk-stats" value="reading_stats_daily&#xa;newWordsCount += 1&#xa;（新增 known_words 时）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="lane3">
+          <mxGeometry x="780" y="210" width="170" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- State transitions -->
+        <mxCell id="lk-st-unknown" value="Unknown" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane3">
+          <mxGeometry x="1000" y="170" width="90" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="lk-st-known" value="Known" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane3">
+          <mxGeometry x="1150" y="170" width="90" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="lk-st-note" value="状态转换简图" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontStyle=2" vertex="1" parent="lane3">
+          <mxGeometry x="1040" y="145" width="120" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="e-st1" value="已会" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane3" source="lk-st-unknown" target="lk-st-known"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-st2" value="加入生词本" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane3" source="lk-st-known" target="lk-st-unknown"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="e-lk1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane3" source="lk-tap" target="lk-dict"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-lk2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane3" source="lk-dict" target="lk-sheet"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-lk3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane3" source="lk-sheet" target="lk-check"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-lk4" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane3" source="lk-check" target="lk-unknown"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-lk5" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane3" source="lk-check" target="lk-known"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-lk6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="lane3" source="lk-table" target="lk-redraw"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-lk7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="lane3" source="lk-redraw" target="lk-stats"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ========== Flow 4: Unlock / Quota ========== -->
+        <mxCell id="lane4" value="④ 解锁与预处理额度（已废弃 · Sprint 11）" style="swimlane;whiteSpace=wrap;html=1;startSize=32;fillColor=#f5f5f5;strokeColor=#999999;fontStyle=1;fontSize=13;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1290" width="1320" height="320" as="geometry" />
+        </mxCell>
+
+        <mxCell id="unl-trigger" value="阅读器请求块&#xa;globalBlockIndex = N" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane4">
+          <mxGeometry x="30" y="55" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="unl-read" value="Drift&#xa;读 parse_quota&#xa;unlockedBlockCount&#xa;freeAllowance=40" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane4">
+          <mxGeometry x="220" y="50" width="170" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="unl-check" value="N &lt; unlockedBlockCount?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane4">
+          <mxGeometry x="430" y="50" width="150" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="unl-free" value="免费块 index 0–39&#xa;允许预处理&#xa;parseStatus: pending→processing→done" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane4">
+          <mxGeometry x="620" y="45" width="200" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="unl-locked" value="N ≥ unlockedBlockCount&#xa;块未解锁&#xa;展示全屏解锁页" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane4">
+          <mxGeometry x="620" y="150" width="200" height="65" as="geometry" />
+        </mxCell>
+
+        <mxCell id="unl-ad" value="用户观看激励视频&#xa;（MVP: 模拟按钮）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane4">
+          <mxGeometry x="860" y="150" width="170" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="unl-inc" value="Drift&#xa;UPDATE parse_quota&#xa;unlockedBlockCount += 100&#xa;lastAdUnlockAt = now" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="lane4">
+          <mxGeometry x="1060" y="140" width="200" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="unl-preprocess" value="Isolate 预处理&#xa;注入 span 高亮&#xa;写回块文件 / 更新 parseStatus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane4">
+          <mxGeometry x="860" y="45" width="190" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="unl-fail" value="预处理失败 →&#xa;降级 plain 文本渲染" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" vertex="1" parent="lane4">
+          <mxGeometry x="1080" y="50" width="170" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="unl-note" value="【已废弃】v1.0 全书可读：导入时 unlocked=totalBlocks；无广告解锁。下图保留历史方案参考。" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#666666;fontStyle=2" vertex="1" parent="lane4">
+          <mxGeometry x="30" y="250" width="700" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="unl-storage" value="存储: books/{bookId}/block_NNNN.* + content_blocks 元数据（不进 DB BLOB）" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;fontColor=#666666;" vertex="1" parent="lane4">
+          <mxGeometry x="30" y="275" width="500" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e-un1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane4" source="unl-trigger" target="unl-read"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane4" source="unl-read" target="unl-check"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un3" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane4" source="unl-check" target="unl-free"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un4" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane4" source="unl-check" target="unl-locked"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane4" source="unl-free" target="unl-preprocess"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="lane4" source="unl-preprocess" target="unl-fail"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane4" source="unl-locked" target="unl-ad"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="lane4" source="unl-ad" target="unl-inc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-un9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="lane4" source="unl-inc" target="unl-check"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1160" y="250" /><mxPoint x="505" y="250" /></Array></mxGeometry></mxCell>
+
+        <!-- Cross-flow link: read-next to unlock -->
+        <mxCell id="cross-note" value="块末衔接 → 直接加载下一块（v1.0 无解锁墙）" style="text;html=1;strokeColor=#82b366;fillColor=none;align=center;fontSize=11;fontStyle=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="620" y="870" width="180" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

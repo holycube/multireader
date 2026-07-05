@@ -1,0 +1,66 @@
+---
+description: 沉浸式外语小说阅读器 — 当前阶段、待定事项与文档导航（Sprint 详史见 mvp-plan）
+
+alwaysApply: true
+---
+
+# 项目开发路线图
+
+## 当前阶段
+
+| 项 | 状态 |
+|----|------|
+| 产品 / 技术 / 数据模型 / POC | ✅ 已完成 → 见 `docs/PRD-v0.3.md`、`tech-stack.md`、`data-model.md`、`poc-report.md` |
+| MVP 工程 | ✅ **Sprint 0–12 已完成** |
+| v1.0 发布 | 🚧 **Play 封闭测试** → `docs/play-closed-testing-checklist.md` |
+| Sprint 详史与验收 | → **[docs/mvp-plan.md](../../docs/mvp-plan.md)** |
+| Sprint 收尾文档同步 | → **[docs/sprint-closeout-checklist.md](../../docs/sprint-closeout-checklist.md)** |
+
+### 最近 Sprint（摘要）
+
+| Sprint | 要点 | 完成日 |
+|--------|------|--------|
+| **12** | 词典 CDN 拆包、multireader 品牌、Release AAB 脚本、Play 清单 | 2026-06-28 |
+| **12+** | 义项主次标注：`DictMeaning` + `LookupMeaningsText`；`mvp_dict` schema v2 / manifest v2 | 2026-06-29 |
+| **11** | v1.0：去广告/全书可读、时长埋点、生词本列表、PRD v0.3 | 2026-06-28 |
+| **10** | 词形查词双 Tab：`mvp_dict_aliases.json`、`DictLoader.resolve()`、`LookupVariantCard` | 2026-06-28 |
+
+更早 Sprint（5–9.7、词典扩充、个人中心、设计系统等）见 `mvp-plan.md` Sprint 总览。
+
+---
+
+## 讨论顺序（剩余）
+
+1. **Play 封闭测试** → 上传 AAB、测试员、Data safety、隐私 URL
+2. **v1.1 Pro** → Anki 导出 → 备份 → 大词典包（一次性买断，见 monetization.md）
+
+---
+
+## 仍待定（不阻塞 v1.0 海外首发）
+
+| ID | 事项 |
+|----|------|
+| ~~P1-02~~ | ~~词典 CDN / 按需下载~~ → **✅ Sprint 12 已关闭**（[dict-pack-delivery.md](../../docs/dict-pack-delivery.md)） |
+| ~~P1-09~~ | ~~广告 SDK~~ → **已取消**，改 Pro 买断 |
+| P1-04 | 预置词表授权边界 |
+| P2 | Anki 导入、运行时词干化（方案 A）等 |
+| 国内渠道 | 软著/备案（见 monetization.md §6；Play 海外不需要） |
+| CDN 生产 URL | 占位 `cdn.example.com` → 上架前替换 |
+
+已关闭的 P0/P1 决策见 `docs/mvp-plan.md`、`docs/monetization.md` 与 `docs/tech-stack.md`。
+
+---
+
+## 文档约定
+
+- 设计文档 → `docs/`；UI → `design-system.md`；图表 → `docs/diagrams/`
+- 变现与发布 → **`docs/monetization.md`**；PRD → **`docs/PRD-v0.3.md`**
+- 词典拆包 → **`docs/dict-pack-delivery.md`**
+- 参考库索引 → `docs/refs-index/`；克隆源码 → `refs/`（不进 git）
+- 不做书源聚合；v0.1 仅中英；不做账号体系
+
+## AI 协作指引
+
+- 写代码前：`monetization.md`、`mvp-plan` 当前 Sprint、`data-model` 状态机
+- 写 POC 代码前：先查 **`docs/refs-index/README.md`**，再读 `refs/` 源码（关键词表只维护在 README）
+- Release 构建：`poc/scripts/build_release.ps1`；**Sprint 收尾按 `docs/sprint-closeout-checklist.md` 单轨同步文档**

@@ -1,0 +1,70 @@
+name: multi_novel_reader
+description: 沉浸式外语小说阅读器 — 本地导入、高亮查词、词库管理
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 本地数据库
+  drift: ^2.22.1
+  drift_flutter: ^0.2.4
+  sqlite3_flutter_libs: ^0.5.28
+  path: ^1.9.0
+  path_provider: ^2.1.5
+
+  # EPUB 解析
+  epubx: ^4.0.0
+
+  # HTML 渲染（POC2）
+  flutter_widget_from_html: ^0.16.0
+  html: ^0.15.5
+
+  # 文件选择
+  file_picker: ^8.1.7
+
+  # 外部链接
+  url_launcher: ^6.3.1
+
+  # 词典包 CDN（Release）
+  http: ^1.2.2
+  crypto: ^3.0.6
+
+  # 工具
+  uuid: ^4.5.1
+  image: ^3.0.8
+
+  # 阅读体验（Sprint 5）
+  flutter_tts: ^4.2.0
+  shared_preferences: ^2.3.0
+  screen_brightness: ^2.1.0
+  package_info_plus: ^8.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  drift_dev: ^2.22.1
+  build_runner: ^2.4.13
+  archive: ^3.6.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/dict/mvp_dict.json
+    - assets/dict/mvp_dict_aliases.json
+    - assets/presets/
+    - assets/legal/
+  fonts:
+    - family: NotoSerifSC
+      fonts:
+        - asset: assets/fonts/NotoSerifSC-Regular.otf
+          weight: 400
+        - asset: assets/fonts/NotoSerifSC-SemiBold.otf
+          weight: 600

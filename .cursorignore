@@ -1,0 +1,25 @@
+﻿# refs 克隆库噪音（不参与 Cursor 索引）
+refs/**/.git/
+refs/**/tool/
+refs/**/integration_test/
+refs/**/test_driver/
+
+# 各库测试（示例见 docs/refs-index/）
+refs/**/test/
+
+# drift 平台脚手架
+refs/drift/examples/app/android/
+refs/drift/examples/app/ios/
+refs/drift/examples/app/linux/
+refs/drift/examples/app/macos/
+refs/drift/examples/app/windows/
+refs/drift/examples/app/web/
+
+# fwfh 演示与工具
+refs/flutter_widget_from_html/demo_app/
+refs/flutter_widget_from_html/tool/
+
+# drift 仓库非示例子树
+refs/drift/docs/
+refs/drift/.github/
+refs/drift/extras/

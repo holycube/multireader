@@ -40,3 +40,18 @@ poc/test/fixtures/*.epub
 
 # ECDICT downloads (large)
 poc/data/
+
+# Gradle wrapper caches (large; download locally via bootstrap)
+poc/.gradle-local/
+poc/.gradle-ship/
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Local debug logs
+poc/build_debug_log*.txt
+poc/test_result.txt
+
+# Compiled scratch files
+poc/android/_tls_test.class
