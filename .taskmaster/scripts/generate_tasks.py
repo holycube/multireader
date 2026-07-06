@@ -25,7 +25,7 @@ def _load_dotenv() -> None:
 
 
 _load_dotenv()
-api_key = os.environ.get("DEEPSEEK_API_KEY")
+api_key = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")
 if not api_key:
     raise SystemExit(
         "DEEPSEEK_API_KEY not set. Copy .env.example to .env and add your key."
